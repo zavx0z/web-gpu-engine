@@ -1,3 +1,7 @@
+if (import.meta.hot) {
+  import.meta.hot.accept();
+}
+
 import { WebGPURenderer, Scene, PerspectiveCamera, Mesh, TorusGeometry, BasicMaterial, vec3 } from './engine.js';
 
 async function main() {
@@ -10,7 +14,7 @@ async function main() {
   camera.position[2] = 2;
   camera.lookAt(vec3.fromValues(0, 0, 0));
 
-  const geometry = new TorusGeometry(0.5, 0.2, 32, 16);
+  const geometry = new TorusGeometry(0.4, 0.2, 32, 16);
   const material = new BasicMaterial();
   const torus = new Mesh(geometry, material);
 

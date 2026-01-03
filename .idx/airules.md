@@ -102,28 +102,23 @@ Configure a web preview for your application. The `$PORT` variable is dynamicall
 
 Here are some examples of how to configure your `dev.nix` for common languages and frameworks.
 
-### Node.js Web Server
-This example sets up a Node.js environment, installs dependencies, and runs a development server with a web preview.
+### Bun Web Server
+This example sets up a Bun.js environment and runs a development server with a web preview. It uses a `serve.ts` file to start the server.
 
 ```nix
 { pkgs, ... }: {
-  packages = [ pkgs.nodejs_20 ];
-  idx = {
-    extensions = [ "dbaeumer.vscode-eslint" ];
-    workspace = {
-      onCreate = {
-        npm-install = "npm install";
-      };
-      onStart = {
-        dev-server = "npm run dev";
-      };
-    };
+  channel = "unstable"; # Bun is available on unstable channel
+  packages = [ pkgs.bun ];
+  idx.previews = {
+    enable = true;
     previews = {
-      enable = true;
-      previews = {
-        web = {
-          command = ["npm" "run" "dev" "--" "--port" "$PORT"];
-          manager = "web";
+      web = {
+        # The $PORT variable will be automatically substituted by IDX
+        command = [ "bun" "run" "--hot" "serve.ts" ];
+        manager = "web";
+        env = {
+          # Explicitly pass the port to the server
+          PORT = "$PORT";
         };
       };
     };
@@ -171,6 +166,26 @@ This example sets up a Go environment for building a command-line interface.
       };
       onStart = {
         run-app = "go run .";
+      };
+    };
+  };
+}
+```
+
+### Static Web Project
+This example sets up a Python environment to serve a static website.
+
+```nix
+{ pkgs, ... }: {
+  packages = [ pkgs.python3 ];
+  idx = {
+    previews = {
+      enable = true;
+      previews = {
+        web = {
+          command = ["python" "-m" "http.server" "$PORT"];
+          manager = "web";
+        };
       };
     };
   };

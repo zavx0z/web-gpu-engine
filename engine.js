@@ -1,8 +1,5 @@
-import "./gl-matrix.js";
-
-const { mat4, vec3: vec3_ } = glMatrix;
-
-export const vec3 = vec3_;
+import { mat4, vec3 } from "./gl-matrix.js"
+export { vec3 }
 
 export class WebGPURenderer {
   constructor() {
@@ -49,60 +46,60 @@ export class WebGPURenderer {
     scene.meshes.forEach(mesh => {
       if (!mesh.pipeline) {
         mesh.pipeline = device.createRenderPipeline({
-            layout: 'auto',
-            vertex: {
-              module: device.createShaderModule({
-                code: mesh.material.vsSource,
-              }),
-              entryPoint: 'main',
-              buffers: [
-                {
-                  arrayStride: 12, // 3 * 4 bytes
-                  attributes: [
-                    {
-                      shaderLocation: 0,
-                      offset: 0,
-                      format: 'float32x3',
-                    },
-                  ],
-                },
-              ],
-            },
-            fragment: {
-              module: device.createShaderModule({
-                code: mesh.material.fsSource,
-              }),
-              entryPoint: 'main',
-              targets: [
-                {
-                  format: this.presentationFormat,
-                },
-              ],
-            },
-            primitive: {
-              topology: 'line-list',
-            },
+          layout: 'auto',
+          vertex: {
+            module: device.createShaderModule({
+              code: mesh.material.vsSource,
+            }),
+            entryPoint: 'main',
+            buffers: [
+              {
+                arrayStride: 12, // 3 * 4 bytes
+                attributes: [
+                  {
+                    shaderLocation: 0,
+                    offset: 0,
+                    format: 'float32x3',
+                  },
+                ],
+              },
+            ],
+          },
+          fragment: {
+            module: device.createShaderModule({
+              code: mesh.material.fsSource,
+            }),
+            entryPoint: 'main',
+            targets: [
+              {
+                format: this.presentationFormat,
+              },
+            ],
+          },
+          primitive: {
+            topology: 'line-list',
+          },
         });
       }
 
       if (!mesh.vertexBuffer) {
-          mesh.vertexBuffer = device.createBuffer({
-            size: mesh.geometry.vertices.length * 4,
-            usage: GPUBufferUsage.VERTEX,
-            mappedAtCreation: true,
-          });
-          new Float32Array(mesh.vertexBuffer.getMappedRange()).set(mesh.geometry.vertices);
-          mesh.vertexBuffer.unmap();
+        mesh.vertexBuffer = device.createBuffer({
+          size: mesh.geometry.vertices.length * 4,
+          usage: GPUBufferUsage.VERTEX,
+          mappedAtCreation: true,
+        });
+        new Float32Array(mesh.vertexBuffer.getMappedRange()).set(mesh.geometry.vertices);
+        mesh.vertexBuffer.unmap();
       }
 
       if (!mesh.indexBuffer) {
-          mesh.indexBuffer = device.createBuffer({
-            size: mesh.geometry.indices.length * 4,
-            usage: GPUBufferUsage.INDEX,
-            mappedAtCreation: true,
-          });
-          new Uint32Array(mesh.indexBuffer.getMappedRange()).set(mesh.geometry.indices);
-          mesh.indexBuffer.unmap();
+        mesh.indexBuffer = device.createBuffer({
+          size: mesh.geometry.indices.length * 4,
+          usage: GPUBufferUsage.INDEX,
+          mappedAtCreation: true,
+        });
+        new Uint32Array(mesh.indexBuffer.getMappedRange()).set(mesh.geometry.indices);
+        mesh.indexBuffer.unmap();
       }
 
       const mvpMatrix = mat4.create();
@@ -111,8 +108,8 @@ export class WebGPURenderer {
 
       if (!mesh.uniformBuffer) {
         mesh.uniformBuffer = device.createBuffer({
-            size: 64, // mat4x4<f32>
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+          size: 64, // mat4x4<f32>
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
       }
 
@@ -126,17 +123,17 @@ export class WebGPURenderer {
 
 
       if (!mesh.bindGroup) {
-          mesh.bindGroup = device.createBindGroup({
-            layout: mesh.pipeline.getBindGroupLayout(0),
-            entries: [
-              {
-                binding: 0,
-                resource: {
-                  buffer: mesh.uniformBuffer,
-                },
+        mesh.bindGroup = device.createBindGroup({
+          layout: mesh.pipeline.getBindGroupLayout(0),
+          entries: [
+            {
+              binding: 0,
+              resource: {
+                buffer: mesh.uniformBuffer,
               },
-            ],
-          });
+            },
+          ],
+        });
       }
 
       passEncoder.setPipeline(mesh.pipeline);
@@ -162,17 +159,17 @@ export class Scene {
 }
 
 export class PerspectiveCamera {
-    constructor(fov, aspect, near, far) {
-        this.projectionMatrix = mat4.create();
-        mat4.perspective(this.projectionMatrix, fov, aspect, near, far);
+  constructor(fov, aspect, near, far) {
+    this.projectionMatrix = mat4.create();
+    mat4.perspective(this.projectionMatrix, fov, aspect, near, far);
 
-        this.viewMatrix = mat4.create();
-        this.position = vec3.create();
-    }
+    this.viewMatrix = mat4.create();
+    this.position = vec3.create();
+  }
 
-    lookAt(target) {
-        mat4.lookAt(this.viewMatrix, this.position, target, vec3.fromValues(0, 1, 0));
-    }
+  lookAt(target) {
+    mat4.lookAt(this.viewMatrix, this.position, target, vec3.fromValues(0, 1, 0));
+  }
 }
 
 
@@ -213,20 +210,20 @@ export class TorusGeometry {
       }
     }
     for (let j = 1; j <= radialSegments; j++) {
-        for (let i = 1; i <= tubularSegments; i++) {
-            const a = (tubularSegments + 1) * j + i - 1;
-            const b = (tubularSegments + 1) * (j - 1) + i - 1;
-            const c = (tubularSegments + 1) * (j - 1) + i;
-            const d = (tubularSegments + 1) * j + i;
+      for (let i = 1; i <= tubularSegments; i++) {
+        const a = (tubularSegments + 1) * j + i - 1;
+        const b = (tubularSegments + 1) * (j - 1) + i - 1;
+        const c = (tubularSegments + 1) * (j - 1) + i;
+        const d = (tubularSegments + 1) * j + i;
 
-            indices.push(a, b);
-            indices.push(b, c);
-            indices.push(c, d);
-            indices.push(d, a);
+        indices.push(a, b);
+        indices.push(b, c);
+        indices.push(c, d);
+        indices.push(d, a);
 
-            indices.push(a, c);
-            indices.push(b, d);
-        }
+        indices.push(a, c);
+        indices.push(b, d);
+      }
     }
 
     this.vertices = new Float32Array(vertices);

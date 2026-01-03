@@ -1,21 +1,17 @@
+# .idx/dev.nix
 { pkgs, ... }: {
-  channel = "stable-24.05";
-  packages = [ pkgs.python3 ];
-  idx = {
-    extensions = [ "google.gemini-cli-vscode-ide-companion" ];
+  channel = "unstable";
+  packages = [ pkgs.bun ]; # Убедитесь, что bun добавлен
+  idx.previews = {
+    enable = true;
     previews = {
-      enable = true;
-      previews = {
-        web = {
-          # Запускаем простой HTTP-сервер для обслуживания статичных файлов
-          command = ["python" "-m" "http.server" "$PORT"];
-          manager = "web";
+      web = {
+        # Переменная $PORT будет автоматически подставлена IDX
+        command = [ "bun" "run" "--hot" "serve.ts" ];
+        manager = "web";
+        env = {
+          PORT = "$PORT"; # Явно передаем переменную серверу
         };
-      };
-    };
-    workspace = {
-      onCreate = {
-        default.openFiles = [ ".idx/dev.nix" "index.html" "main.js" ];
       };
     };
   };
