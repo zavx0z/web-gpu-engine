@@ -5,14 +5,12 @@ if (import.meta.hot) {
 import {
 	WebGPURenderer,
 	Scene,
-	PerspectiveCamera,
+	ViewPoint,
 	Mesh,
 	TorusGeometry,
 	BasicMaterial,
 	AxesHelper,
-	OrbitControls,
-	vec3,
-	mat4, // Возвращаем импорт mat4
+	mat4,
 } from "../src/WebGPUEngine"
 
 /**
@@ -26,19 +24,14 @@ async function main() {
 	// Создание сцены
 	const scene = new Scene()
 
-	// Создание камеры
-	const camera = new PerspectiveCamera({
+	// Создание точки обзора (камеры и управления)
+	const viewPoint = new ViewPoint({
+		element: renderer.canvas!,
 		fov: (2 * Math.PI) / 5,
 		aspect: window.innerWidth / window.innerHeight,
 		near: 0.1,
 		far: 100.0,
 	})
-	// СНАЧАЛА устанавливаем позицию камеры
-	camera.position[2] = 2
-	camera.lookAt(vec3.fromValues(0, 0, 0))
-
-	// ПОТОМ создаем OrbitControls, чтобы он считал правильный начальный радиус
-	const controls = new OrbitControls(camera, renderer.canvas!)
 
 	// Создание геометрии и материала для тора
 	const geometry = new TorusGeometry({
@@ -66,8 +59,8 @@ async function main() {
 		renderer.setSize(width, height)
 
 		// Обновляем соотношение сторон камеры и матрицу проекции
-		camera.aspect = width / height
-		camera.updateProjectionMatrix()
+		viewPoint.aspect = width / height
+		viewPoint.updateProjectionMatrix()
 	})
 
 	/**
@@ -77,11 +70,11 @@ async function main() {
 		// Вращаем тор вокруг своей оси Y
 		mat4.rotate(torus.modelMatrix, torus.modelMatrix, 0.01, [0, 1, 0])
 
-		// Контролы обновляют матрицу вида камеры на основе ввода пользователя
-		controls.update()
+		// ViewPoint сам обновляется при вводе пользователя, поэтому
+		// дополнительно вызывать update() для него не нужно, он уже это делает внутри себя.
 
 		// Рендеринг сцены
-		renderer.render(scene, camera)
+		renderer.render(scene, viewPoint)
 		requestAnimationFrame(animate)
 	}
 
