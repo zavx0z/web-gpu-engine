@@ -1,19 +1,14 @@
-import type { Mesh } from "../core/Mesh"
+import { Object3D } from "../core/Object3D"
 
 /**
- * Представляет собой контейнер для 3D-объектов, источников света и камер.
+ * Класс для создания сцен.
+ * @see https://threejs.org/docs/#api/en/scenes/Scene
  */
-export class Scene {
-	/**
-	 * Массив дочерних объектов в сцене.
-	 */
-	public children: Mesh[] = []
+export class Scene extends Object3D {
+	public readonly isScene: true = true
+	public type = "Scene"
 
-	/**
-	 * Добавляет объект в сцену.
-	 * @param object Объект для добавления (например, Mesh).
-	 */
-	public add(object: Mesh): void {
-		this.children.push(object)
+	constructor() {
+		super()
 	}
 }

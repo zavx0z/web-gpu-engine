@@ -9,6 +9,7 @@ import {
 	Mesh,
 	TorusGeometry,
 	BasicMaterial,
+	AxesHelper,
 	vec3,
 	mat4,
 } from "../src/WebGPUEngine"
@@ -46,6 +47,10 @@ async function main() {
 
 	// Добавление тора на сцену
 	scene.add(torus)
+
+	// Добавление осей координат
+	const axesHelper = new AxesHelper(1)
+	scene.add(axesHelper)
 
 	// Обработчик изменения размера окна
 	window.addEventListener("resize", () => {

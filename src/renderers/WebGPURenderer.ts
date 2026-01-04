@@ -1,7 +1,8 @@
 import { mat4 } from "gl-matrix"
 import type { Scene } from "../scenes/Scene"
 import type { PerspectiveCamera } from "../cameras/PerspectiveCamera"
-import type { Mesh } from "../core/Mesh"
+import { Object3D } from "../core/Object3D"
+import { Mesh } from "../core/Mesh"
 
 /**
  * Отвечает за рендеринг сцены с использованием WebGPU.
@@ -20,7 +21,7 @@ export class WebGPURenderer {
 	 */
 	public device: GPUDevice | null = null
 	/**
-	 * Контекст холста, на котором происходит отрисовка.
+	 * Контекст холста, на котором происходит отрисовка.s 
 	 */
 	public context: GPUCanvasContext | null = null
 	/**
@@ -160,31 +161,40 @@ export class WebGPURenderer {
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 		passEncoder.setPipeline(pipeline)
 
-		scene.children.forEach((object: Mesh) => {
-			if (object.isMesh) {
+		scene.children.forEach((object: Object3D) => {
+			if ((object as Mesh).isMesh) {
+                const mesh = object as Mesh
+
+                if (!mesh.geometry || !mesh.geometry.attributes.position || !mesh.geometry.index) {
+                    return
+                }
+
+                const positionAttribute = mesh.geometry.attributes.position
+                const indexAttribute = mesh.geometry.index
+
 				const vertexBuffer = device.createBuffer({
-					size: object.geometry.vertices.byteLength,
+					size: positionAttribute.array.byteLength,
 					usage: GPUBufferUsage.VERTEX,
 					mappedAtCreation: true,
 				})
 				new Float32Array(vertexBuffer.getMappedRange()).set(
-					object.geometry.vertices,
+					positionAttribute.array as Float32Array
 				)
 				vertexBuffer.unmap()
 
 				const indexBuffer = device.createBuffer({
-					size: object.geometry.indices.byteLength,
+					size: indexAttribute.array.byteLength,
 					usage: GPUBufferUsage.INDEX,
 					mappedAtCreation: true,
 				})
 				new Uint16Array(indexBuffer.getMappedRange()).set(
-					object.geometry.indices,
+					indexAttribute.array as Uint16Array
 				)
 				indexBuffer.unmap()
 
 				const mvpMatrix = mat4.create()
 				const modelViewMatrix = mat4.create()
-				mat4.multiply(modelViewMatrix, camera.viewMatrix, object.modelMatrix)
+				mat4.multiply(modelViewMatrix, camera.viewMatrix, mesh.modelMatrix)
 				mat4.multiply(mvpMatrix, camera.projectionMatrix, modelViewMatrix)
 
 				const uniformBuffer = device.createBuffer({
@@ -211,7 +221,7 @@ export class WebGPURenderer {
 				passEncoder.setBindGroup(0, uniformBindGroup)
 				passEncoder.setVertexBuffer(0, vertexBuffer)
 				passEncoder.setIndexBuffer(indexBuffer, "uint16")
-				passEncoder.drawIndexed(object.geometry.indices.length, 1, 0, 0, 0)
+				passEncoder.drawIndexed(indexAttribute.array.length, 1, 0, 0, 0)
 			}
 		})
 

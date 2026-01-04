@@ -1,16 +1,32 @@
+import { Material, MaterialParameters } from "./Material"
+
+/**
+ * Параметры для конструктора BasicMaterial.
+ */
+export interface BasicMaterialParameters extends MaterialParameters {
+	/**
+	 * Цвет материала в формате RGBA.
+	 * @default [1, 1, 1, 1]
+	 */
+	color?: number[]
+}
+
 /**
  * Простой материал, который использует сплошной цвет.
+ * @see https://threejs.org/docs/#api/en/materials/MeshBasicMaterial
  */
-export class BasicMaterial {
+export class BasicMaterial extends Material {
+	public type = "BasicMaterial"
 	/**
 	 * Цвет материала в формате RGBA.
 	 */
 	public color: number[]
 
 	/**
-	 * @param options Опции для материала.
+	 * @param parameters Параметры материала.
 	 */
-	constructor(options: { color?: number[] } = {}) {
-		this.color = options.color || [1, 1, 1, 1]
+	constructor(parameters: BasicMaterialParameters = {}) {
+		super(parameters)
+		this.color = parameters.color || [1, 1, 1, 1]
 	}
 }

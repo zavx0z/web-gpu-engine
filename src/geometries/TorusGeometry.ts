@@ -1,7 +1,10 @@
+import { BufferGeometry } from "../core/BufferGeometry"
+import { Float32BufferAttribute } from "../core/BufferAttribute"
+
 /**
  * Параметры для создания геометрии тора.
  */
-export interface TorusGeometryParameters {
+interface TorusGeometryParameters {
 	/**
 	 * Радиус тора от центра до центра "трубы".
 	 * @default 0.5
@@ -9,7 +12,7 @@ export interface TorusGeometryParameters {
 	 */
 	radius?: number
 	/**
-	 * Радиус "трубы" тора.
+	 * Радиус "трубы".
 	 * @default 0.2
 	 * @min 0
 	 */
@@ -22,8 +25,8 @@ export interface TorusGeometryParameters {
 	 */
 	radialSegments?: number
 	/**
-	 * Количество сегментов по окружности "трубы". Целое число.
-	 * @default 24
+	 * Количество сегментов "трубы". Целое число.
+	 * @default 12
 	 * @min 3
 	 * @max 255
 	 */
@@ -31,98 +34,52 @@ export interface TorusGeometryParameters {
 }
 
 /**
- * Генерирует геометрию для тора (бублика).
+ * Класс для создания геометрии тора.
+ * @see https://threejs.org/docs/#api/en/geometries/TorusGeometry
  */
-export class TorusGeometry {
+export class TorusGeometry extends BufferGeometry {
 	/**
-	 * Радиус тора.
-	 */
-	public radius: number
-	/**
-	 * Радиус "трубы" тора.
-	 */
-	public tube: number
-	/**
-	 * Количество радиальных сегментов.
-	 */
-	public radialSegments: number
-	/**
-	 * Количество трубчатых сегментов.
-	 */
-	public tubularSegments: number
-	/**
-	 * Вершины геометрии.
-	 */
-	public vertices: Float32Array
-	/**
-	 * Индексы вершин для построения геометрии.
-	 */
-	public indices: Uint16Array
-
-	/**
-	 * @param parameters Параметры для создания геометрии тора.
+	 * @param parameters Параметры геометрии.
 	 */
 	constructor(parameters: TorusGeometryParameters = {}) {
-		this.radius = parameters.radius ?? 0.5
-		this.tube = parameters.tube ?? 0.2
-		this.radialSegments = parameters.radialSegments ?? 12
-		this.tubularSegments = parameters.tubularSegments ?? 24
+		super()
 
-		// Проверка корректности параметров
-		if (this.radius < 0) {
-			throw new Error("Радиус не может быть отрицательным.")
-		}
-		if (this.tube < 0) {
-			throw new Error("Радиус трубы не может быть отрицательным.")
-		}
-		if (
-			!Number.isInteger(this.radialSegments) ||
-			this.radialSegments < 3 ||
-			this.radialSegments > 255
-		) {
-			throw new Error(
-				"Количество радиальных сегментов должно быть целым числом от 3 до 255.",
-			)
-		}
-		if (
-			!Number.isInteger(this.tubularSegments) ||
-			this.tubularSegments < 3 ||
-			this.tubularSegments > 255
-		) {
-			throw new Error(
-				"Количество трубчатых сегментов должно быть целым числом от 3 до 255.",
-			)
-		}
+		const {
+			radius = 0.5,
+			tube = 0.2,
+			radialSegments = 12,
+			tubularSegments = 12,
+		} = parameters
 
 		const vertices: number[] = []
 		const indices: number[] = []
 
-		for (let j = 0; j <= this.radialSegments; j++) {
-			for (let i = 0; i <= this.tubularSegments; i++) {
-				const u = (i / this.tubularSegments) * Math.PI * 2
-				const v = (j / this.radialSegments) * Math.PI * 2
+		for (let j = 0; j <= radialSegments; j++) {
+			for (let i = 0; i <= tubularSegments; i++) {
+				const u = (i / tubularSegments) * Math.PI * 2
+				const v = (j / radialSegments) * Math.PI * 2
 
-				const x = (this.radius + this.tube * Math.cos(v)) * Math.cos(u)
-				const y = (this.radius + this.tube * Math.cos(v)) * Math.sin(u)
-				const z = this.tube * Math.sin(v)
+				const x = (radius + tube * Math.cos(v)) * Math.cos(u)
+				const y = (radius + tube * Math.cos(v)) * Math.sin(u)
+				const z = tube * Math.sin(v)
 
 				vertices.push(x, y, z)
 			}
 		}
 
-		for (let j = 1; j <= this.radialSegments; j++) {
-			for (let i = 1; i <= this.tubularSegments; i++) {
-				const a = (this.tubularSegments + 1) * j + i - 1
-				const b = (this.tubularSegments + 1) * (j - 1) + i - 1
-				const c = (this.tubularSegments + 1) * (j - 1) + i
-				const d = (this.tubularSegments + 1) * j + i
+		for (let j = 1; j <= radialSegments; j++) {
+			for (let i = 1; i <= tubularSegments; i++) {
+				const a = (tubularSegments + 1) * j + i - 1
+				const b = (tubularSegments + 1) * (j - 1) + i - 1
+				const c = (tubularSegments + 1) * (j - 1) + i
+				const d = (tubularSegments + 1) * j + i
 
 				indices.push(a, b, d)
 				indices.push(b, c, d)
 			}
 		}
 
-		this.vertices = new Float32Array(vertices)
-		this.indices = new Uint16Array(indices)
+		this.setIndex(indices)
+		this.setAttribute("position", new Float32BufferAttribute(vertices, 3))
 	}
 }

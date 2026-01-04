@@ -1,35 +1,23 @@
-import { mat4 } from "gl-matrix"
-import type { TorusGeometry } from "../geometries/TorusGeometry"
-import type { BasicMaterial } from "../materials/BasicMaterial"
+import { Object3D } from "./Object3D"
+import { BufferGeometry } from "./BufferGeometry"
+import { Material } from "../materials/Material"
 
 /**
- * Представляет 3D-объект в сцене, состоящий из геометрии и материала.
+ * Класс для треугольных полигональных сеток.
+ * @see https://threejs.org/docs/#api/en/objects/Mesh
  */
-export class Mesh {
-	/**
-	 * Геометрия объекта.
-	 */
-	public geometry: TorusGeometry
-	/**
-	 * Материал объекта.
-	 */
-	public material: BasicMaterial
-	/**
-	 * Флаг, указывающий, что это объект Mesh.
-	 */
-	public readonly isMesh: boolean = true
+export class Mesh extends Object3D {
+	public readonly isMesh: true = true
+	public type = "Mesh"
 
 	/**
-	 * Матрица модели, определяющая положение, вращение и масштаб объекта в мире.
+	 * @param geometry Геометрия сетки.
+	 * @param material Материал сетки.
 	 */
-	public modelMatrix: mat4 = mat4.create()
-
-	/**
-	 * @param geometry Геометрия объекта (например, TorusGeometry).
-	 * @param material Материал объекта (например, BasicMaterial).
-	 */
-	constructor(geometry: TorusGeometry, material: BasicMaterial) {
-		this.geometry = geometry
-		this.material = material
+	constructor(
+		public geometry: BufferGeometry,
+		public material: Material | Material[]
+	) {
+		super()
 	}
 }
