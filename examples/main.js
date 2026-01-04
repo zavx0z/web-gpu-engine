@@ -2,7 +2,7 @@ if (import.meta.hot) {
   import.meta.hot.accept();
 }
 
-import { WebGPURenderer, Scene, PerspectiveCamera, Mesh, TorusGeometry, BasicMaterial, vec3 } from './engine.js';
+import { WebGPURenderer, Scene, PerspectiveCamera, Mesh, TorusGeometry, BasicMaterial, vec3, mat4 } from '../src/WebGPUEngine.js';
 
 async function main() {
   const renderer = new WebGPURenderer();
@@ -21,6 +21,8 @@ async function main() {
   scene.add(torus);
 
   function animate() {
+    mat4.rotate(torus.modelMatrix, torus.modelMatrix, 0.01, [0, 1, 0]);
+
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }

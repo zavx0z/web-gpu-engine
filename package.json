@@ -1,6 +1,6 @@
 {
   "name": "bun-project",
-  "module": "index.ts",
+  "module": "serve.ts",
   "type": "module",
   "devDependencies": {
     "bun-types": "latest"
