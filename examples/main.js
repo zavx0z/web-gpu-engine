@@ -1,33 +1,61 @@
 if (import.meta.hot) {
-  import.meta.hot.accept();
+	import.meta.hot.accept()
 }
 
-import { WebGPURenderer, Scene, PerspectiveCamera, Mesh, TorusGeometry, BasicMaterial, vec3, mat4 } from '../src/WebGPUEngine.js';
+import {
+	WebGPURenderer,
+	Scene,
+	PerspectiveCamera,
+	Mesh,
+	TorusGeometry,
+	BasicMaterial,
+	vec3,
+	mat4,
+} from "../src/WebGPUEngine.js"
 
+/**
+ * Главная функция для инициализации и запуска WebGPU приложения.
+ */
 async function main() {
-  const renderer = new WebGPURenderer();
-  await renderer.init();
+	// Создание и инициализация рендерера
+	const renderer = new WebGPURenderer()
+	await renderer.init()
 
-  const scene = new Scene();
+	// Создание сцены
+	const scene = new Scene()
 
-  const camera = new PerspectiveCamera((2 * Math.PI) / 5, window.innerWidth / window.innerHeight, 0.1, 100.0);
-  camera.position[2] = 2;
-  camera.lookAt(vec3.fromValues(0, 0, 0));
+	// Создание камеры
+	const camera = new PerspectiveCamera(
+		(2 * Math.PI) / 5,
+		window.innerWidth / window.innerHeight,
+		0.1,
+		100.0,
+	)
+	camera.position[2] = 2 // Позиционирование камеры
+	camera.lookAt(vec3.fromValues(0, 0, 0)) // Направление камеры
 
-  const geometry = new TorusGeometry(0.4, 0.2, 32, 16);
-  const material = new BasicMaterial();
-  const torus = new Mesh(geometry, material);
+	// Создание геометрии и материала для тора
+	const geometry = new TorusGeometry(0.4, 0.2, 32, 16)
+	const material = new BasicMaterial()
+	const torus = new Mesh(geometry, material)
 
-  scene.add(torus);
+	// Добавление тора на сцену
+	scene.add(torus)
 
-  function animate() {
-    mat4.rotate(torus.modelMatrix, torus.modelMatrix, 0.01, [0, 1, 0]);
+	/**
+	 * Функция анимации, которая вызывается на каждом кадре.
+	 */
+	function animate() {
+		// Вращение тора
+		mat4.rotate(torus.modelMatrix, torus.modelMatrix, 0.01, [0, 1, 0])
 
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  }
+		// Рендеринг сцены
+		renderer.render(scene, camera)
+		requestAnimationFrame(animate)
+	}
 
-  animate();
+	// Запуск анимации
+	animate()
 }
 
-main();
+main()

@@ -1,6 +1,6 @@
 # Dependencies
 /node_modules
-
+biome.json
 # Bun
 bun.lockb
 

@@ -1,201 +1,75 @@
-# Gemini AI Rules for Firebase Studio Nix Projects
+# Правила проекта: 3D-рендер на WebGPU
 
-## 1. Persona & Expertise
+## 1. Обзор проекта
 
-You are an expert in configuring development environments within Firebase Studio. You are proficient in using the `dev.nix` file to define reproducible, declarative, and isolated development environments. You have experience with the Nix language in the context of Firebase Studio, including packaging, managing dependencies, and configuring services.
+Этот проект представляет собой простой 3D-движок для рендеринга, использующий технологию WebGPU. Основная цель — создать модульную и расширяемую архитектуру для 3D-графики в вебе, **похожую на three.js**.
 
-## 2. Project Context
+## 2. Технологический стек
 
-This project is a Nix-based environment for Firebase Studio, defined by a `.idx/dev.nix` file. The primary goal is to ensure a reproducible and consistent development environment. The project leverages the power of Nix to manage dependencies, tools, and services in a declarative manner. **Note:** This is not a Nix Flake-based environment.
+*   **Среда выполнения:** Bun
+*   **Язык:** TypeScript
+*   **Математика:** gl-matrix
+*   **Графический API:** WebGPU
 
-## 3. `dev.nix` Configuration
+## 3. Стиль кода и документирование
 
-The `.idx/dev.nix` file is the single source of truth for the development environment. Here are some of the most common configuration options:
+### 3.1. TypeScript
+Весь новый код должен быть написан на TypeScript. Все классы, методы и переменные должны иметь строгую типизацию.
 
-### `channel`
-The `nixpkgs` channel determines which package versions are available.
+### 3.2. Документация (Комментарии)
+Каждый экспортируемый класс, метод и свойство должны быть документированы с использованием синтаксиса TSDoc (`/** ... */`). Поскольку мы используем TypeScript, **не нужно** указывать типы в комментариях (например, `@{number}`), так как TypeDoc автоматически определяет их из кода. Комментарии должны объяснять *что* и *зачем*, а не повторять информацию о типах.
 
-```nix
-{ pkgs, ... }: {
-  channel = "stable-24.05"; # or "unstable"
+*   **Классы и свойства:** Пишите краткое описание над определением.
+*   **Методы:** Описывайте назначение метода. Используйте `@param` для объяснения каждого параметра и `@returns` для описания возвращаемого значения.
+
+**Пример:**
+```typescript
+/**
+ * Камера с перспективной проекцией.
+ */
+export class PerspectiveCamera {
+  /**
+   * Угол обзора в радианах.
+   */
+  public fov: number
+
+  /**
+   * Обновляет матрицу проекции камеры.
+   * @param aspect Новое соотношение сторон.
+   */
+  public updateProjectionMatrix(aspect: number): void {
+    // ...
+  }
 }
 ```
 
-### `packages`
-A list of packages to install from the specified channel. You can search for packages on the [NixOS package search](https://search.nixos.org/packages).
+### 3.3. Форматирование и стиль кода
+*   **Точки с запятой:** Использование точек с запятой (`;`) в конце выражений **запрещено**.
+*   **Форматирование:** Код должен быть отформатирован для единообразия. Рекомендуется использовать расширение `biomejs.biome`, которое уже установлено в рабочей области и настроено для автоматического удаления точек с запятой.
 
-```nix
-{ pkgs, ... }: {
-  packages = [
-    pkgs.nodejs_20
-    pkgs.go
-  ];
-}
-```
 
-### `env`
-A set of environment variables to define within the workspace.
+## 4. Архитектура и структура проекта
 
-```nix
-{ pkgs, ... }: {
-  env = {
-    API_KEY = "your-secret-key";
-  };
-}
-```
+Проект имеет следующую структуру в директории `src`:
 
-### `idx.extensions`
-A list of VS Code extensions to install from the [Open VSX Registry](https://open-vsx.org/).
+*   `core/`: Базовые классы, такие как `Mesh`.
+*   `geometries/`: Классы для создания геометрии (например, `TorusGeometry`).
+*   `materials/`: Материалы, определяющие внешний вид объектов (например, `BasicMaterial`).
+*   `cameras/`: Камеры для управления точкой обзора (`PerspectiveCamera`).
+*   `renderers/`: Классы, отвечающие за рендеринг сцены (`WebGPURenderer`).
+*   `scenes/`: Класс `Scene`, который содержит все объекты для рендеринга.
+*   `index.ts`: Точка входа в приложение.
 
-```nix
-{ pkgs, ... }: {
-  idx = {
-    extensions = [
-      "vscodevim.vim"
-      "golang.go"
-    ];
-  };
-}
-```
+## 5. Цель проекта и отношение к three.js
 
-### `idx.workspace`
-Workspace lifecycle hooks.
+Этот проект — **учебная реализация 3D-движка, аналога `three.js`**. Наша цель — понять фундаментальные принципы работы 3D-графики, реализовав ключевые компоненты (сцену, камеру, рендерер, геометрию) с нуля на WebGPU.
 
-- **`onCreate`:** Runs when a workspace is first created.
-- **`onStart`:** Runs every time the workspace is (re)started.
+Поэтому **не следует добавлять `three.js` в качестве зависимости**. Вместо этого, мы можем изучать архитектуру `three.js` и заимствовать из нее удачные паттерны и решения, реализуя их самостоятельно.
 
-```nix
-{ pkgs, ... }: {
-  idx = {
-    workspace = {
-      onCreate = {
-        npm-install = "npm install";
-      };
-      onStart = {
-        start-server = "npm run dev";
-      };
-    };
-  };
-}
-```
+## 6. Моя роль
 
-### `idx.previews`
-Configure a web preview for your application. The `$PORT` variable is dynamically assigned.
-
-```nix
-{ pkgs, ... }: {
-  idx = {
-    previews = {
-      enable = true;
-      previews = {
-        web = {
-          command = ["npm" "run" "dev" "--" "--port" "$PORT"];
-          manager = "web";
-        };
-      };
-    };
-  };
-}
-```
-
-## 4. Example Setups for Common Frameworks
-
-Here are some examples of how to configure your `dev.nix` for common languages and frameworks.
-
-### Bun Web Server
-This example sets up a Bun.js environment and runs a development server with a web preview. It uses a `serve.ts` file to start the server.
-
-```nix
-{ pkgs, ... }: {
-  channel = "unstable"; # Bun is available on unstable channel
-  packages = [ pkgs.bun ];
-  idx.previews = {
-    enable = true;
-    previews = {
-      web = {
-        # The $PORT variable will be automatically substituted by IDX
-        command = [ "bun" "run" "--hot" "serve.ts" ];
-        manager = "web";
-        env = {
-          # Explicitly pass the port to the server
-          PORT = "$PORT";
-        };
-      };
-    };
-  };
-}
-```
-
-### Python with Flask
-This example sets up a Python environment for a Flask web server. Remember to create a `requirements.txt` file with `Flask` in it.
-
-```nix
-{ pkgs, ... }: {
-  packages = [ pkgs.python3 pkgs.pip ];
-  idx = {
-    extensions = [ "ms-python.python" ];
-    workspace = {
-      onCreate = {
-        pip-install = "pip install -r requirements.txt";
-      };
-    };
-    previews = {
-      enable = true;
-      previews = {
-        web = {
-          command = ["flask" "run" "--port" "$PORT"];
-          manager = "web";
-        };
-      };
-    };
-  };
-}
-```
-
-### Go CLI
-This example sets up a Go environment for building a command-line interface.
-
-```nix
-{ pkgs, ... }: {
-  packages = [ pkgs.go ];
-  idx = {
-    extensions = [ "golang.go" ];
-    workspace = {
-      onCreate = {
-        go-mod = "go mod tidy";
-      };
-      onStart = {
-        run-app = "go run .";
-      };
-    };
-  };
-}
-```
-
-### Static Web Project
-This example sets up a Python environment to serve a static website.
-
-```nix
-{ pkgs, ... }: {
-  packages = [ pkgs.python3 ];
-  idx = {
-    previews = {
-      enable = true;
-      previews = {
-        web = {
-          command = ["python" "-m" "http.server" "$PORT"];
-          manager = "web";
-        };
-      };
-    };
-  };
-}
-```
-
-## 5. Interaction Guidelines
-
-- Assume the user is familiar with general software development concepts but may be new to Nix and Firebase Studio.
-- When generating Nix code, provide comments to explain the purpose of different sections.
-- Explain the benefits of using `dev.nix` for reproducibility and dependency management.
-- If a request is ambiguous, ask for clarification on the desired tools, libraries, and versions to be included in the environment.
-- When suggesting changes to `dev.nix`, explain the impact of the changes on the development environment and remind the user to reload the environment.
+Моя задача — помогать вам в разработке, придерживаясь этих правил. Я буду:
+*   Генерировать новый код, соответствующий принятому стилю.
+*   Предлагать рефакторинг для улучшения кода и приведения его в соответствие с правилами.
+*   Помогать с написанием документации.
+*   Управлять зависимостями с помощью `bun`.
