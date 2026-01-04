@@ -10,8 +10,9 @@ import {
 	TorusGeometry,
 	BasicMaterial,
 	AxesHelper,
+	OrbitControls,
 	vec3,
-	mat4,
+	mat4, // Возвращаем импорт mat4
 } from "../src/WebGPUEngine"
 
 /**
@@ -32,8 +33,12 @@ async function main() {
 		near: 0.1,
 		far: 100.0,
 	})
-	camera.position[2] = 2 // Позиционирование камеры
-	camera.lookAt(vec3.fromValues(0, 0, 0)) // Направление камеры
+	// СНАЧАЛА устанавливаем позицию камеры
+	camera.position[2] = 2
+	camera.lookAt(vec3.fromValues(0, 0, 0))
+
+	// ПОТОМ создаем OrbitControls, чтобы он считал правильный начальный радиус
+	const controls = new OrbitControls(camera, renderer.canvas!)
 
 	// Создание геометрии и материала для тора
 	const geometry = new TorusGeometry({
@@ -69,8 +74,11 @@ async function main() {
 	 * Функция анимации, которая вызывается на каждом кадре.
 	 */
 	function animate() {
-		// Вращение тора
+		// Вращаем тор вокруг своей оси Y
 		mat4.rotate(torus.modelMatrix, torus.modelMatrix, 0.01, [0, 1, 0])
+
+		// Контролы обновляют матрицу вида камеры на основе ввода пользователя
+		controls.update()
 
 		// Рендеринг сцены
 		renderer.render(scene, camera)
