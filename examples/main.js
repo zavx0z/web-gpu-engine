@@ -35,7 +35,12 @@ async function main() {
 	camera.lookAt(vec3.fromValues(0, 0, 0)) // Направление камеры
 
 	// Создание геометрии и материала для тора
-	const geometry = new TorusGeometry(0.4, 0.2, 32, 16)
+	const geometry = new TorusGeometry({
+		radius: 0.4,
+		tube: 0.2,
+		radialSegments: 32,
+		tubularSegments: 16,
+	})
 	const material = new BasicMaterial()
 	const torus = new Mesh(geometry, material)
 
