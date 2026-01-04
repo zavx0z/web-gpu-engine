@@ -24,7 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		})
 
 		const geometry = new TorusGeometry({ radius: 0.5, tube: 0.2, radialSegments: 32, tubularSegments: 24 })
-		const material = new BasicMaterial({ color: [1.0, 0.8, 0.0, 1.0] })
+		const material = new BasicMaterial({ color: [1.0, 0.8, 0.0, 1.0], wireframe: true })
 		const mesh = new Mesh({ geometry, material })
 		scene.add(mesh)
 

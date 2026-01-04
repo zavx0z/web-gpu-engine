@@ -9,6 +9,11 @@ export interface BasicMaterialParameters extends MaterialParameters {
 	 * @default [1, 1, 1, 1]
 	 */
 	color?: number[]
+	/**
+	 * Отображать ли геометрию как каркас.
+	 * @default false
+	 */
+	wireframe?: boolean
 }
 
 /**
@@ -21,6 +26,10 @@ export class BasicMaterial extends Material {
 	 * Цвет материала в формате RGBA.
 	 */
 	public color: number[]
+	/**
+	 * Отображать ли геометрию как каркас.
+	 */
+	public wireframe: boolean
 
 	/**
 	 * @param parameters Параметры материала.
@@ -28,5 +37,6 @@ export class BasicMaterial extends Material {
 	constructor(parameters: BasicMaterialParameters = {}) {
 		super(parameters)
 		this.color = parameters.color || [1, 1, 1, 1]
+		this.wireframe = parameters.wireframe || false
 	}
 }

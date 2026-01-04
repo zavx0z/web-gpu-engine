@@ -16,6 +16,7 @@ export class WebGPURenderer {
 	public device: GPUDevice | null = null
 	public context: GPUCanvasContext | null = null
 	public solidPipeline: GPURenderPipeline | null = null
+	public wireframePipeline: GPURenderPipeline | null = null
 	public vertexColorPipeline: GPURenderPipeline | null = null
 
 	public async init(): Promise<void> {
@@ -70,14 +71,14 @@ export class WebGPURenderer {
             `,
 		})
 
-		this.solidPipeline = this.device.createRenderPipeline({
+		const solidPipelineDescriptor: GPURenderPipelineDescriptor = {
 			layout: "auto",
 			vertex: {
 				module: solidShaderModule,
 				entryPoint: "vertex_main",
 				buffers: [
 					{
-						arrayStride: 12, // 3 * float32
+						arrayStride: 12,
 						attributes: [
 							{
 								shaderLocation: 0,
@@ -96,7 +97,17 @@ export class WebGPURenderer {
 			primitive: {
 				topology: "triangle-list",
 			},
-		})
+		}
+
+		this.solidPipeline = this.device.createRenderPipeline(solidPipelineDescriptor)
+
+		const wireframePipelineDescriptor: GPURenderPipelineDescriptor = {
+			...solidPipelineDescriptor,
+			primitive: {
+				topology: "line-list",
+			},
+		}
+		this.wireframePipeline = this.device.createRenderPipeline(wireframePipelineDescriptor)
 
 		const vertexColorShaderModule = this.device.createShaderModule({
 			code: `
@@ -168,8 +179,8 @@ export class WebGPURenderer {
 	}
 
 	public render(scene: Scene, viewPoint: ViewPoint): void {
-		const { device, context, solidPipeline, vertexColorPipeline } = this
-		if (!device || !context || !solidPipeline || !vertexColorPipeline) {
+		const { device, context, solidPipeline, wireframePipeline, vertexColorPipeline } = this
+		if (!device || !context || !solidPipeline || !wireframePipeline || !vertexColorPipeline) {
 			return
 		}
 
@@ -195,7 +206,7 @@ export class WebGPURenderer {
 			mat4.multiply(mvpMatrix, mvpMatrix, object.modelMatrix)
 
 			const cameraUniformBuffer = device.createBuffer({
-				size: 64, // mat4x4<f32>
+				size: 64,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 			})
 			device.queue.writeBuffer(cameraUniformBuffer, 0, (mvpMatrix as Float32Array).buffer)
@@ -204,7 +215,8 @@ export class WebGPURenderer {
 				const mesh = object as Mesh
 				const material = mesh.material as BasicMaterial
 				if (material && mesh.geometry.attributes.position && mesh.geometry.index) {
-					passEncoder.setPipeline(solidPipeline)
+					const pipeline = material.wireframe ? wireframePipeline : solidPipeline
+					passEncoder.setPipeline(pipeline)
 
 					const materialUniformBuffer = device.createBuffer({
 						size: 16, // vec4<f32>
@@ -229,7 +241,7 @@ export class WebGPURenderer {
 					indexBuffer.unmap()
 
 					const uniformBindGroup = device.createBindGroup({
-						layout: solidPipeline.getBindGroupLayout(0),
+						layout: pipeline.getBindGroupLayout(0),
 						entries: [
 							{ binding: 0, resource: { buffer: cameraUniformBuffer } },
 							{ binding: 1, resource: { buffer: materialUniformBuffer } },
