@@ -228,7 +228,8 @@ export class WebGPURenderer {
 				}
 			} else if ((object as LineSegments).isLineSegments) {
 				const line = object as LineSegments
-				if (line.geometry.attributes.position && line.geometry.attributes.color) {
+				const material = line.material as LineBasicMaterial
+				if (material.vertexColors && line.geometry.attributes.position && line.geometry.attributes.color) {
 					passEncoder.setPipeline(vertexColorPipeline)
 
 					const positionBuffer = device.createBuffer({
