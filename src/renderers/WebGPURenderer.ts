@@ -1,11 +1,10 @@
 import { mat4 } from "gl-matrix"
 import type { Scene } from "../scenes/Scene"
-import type { PerspectiveCamera } from "../cameras/PerspectiveCamera"
+import type { ViewPoint } from "../core/ViewPoint"
 import { Object3D } from "../core/Object3D"
 import { Mesh } from "../core/Mesh"
 import { LineSegments } from "../objects/LineSegments"
 import { LineBasicMaterial } from "../materials/LineBasicMaterial"
-import { Material } from "../materials/Material"
 
 /**
  * Отвечает за рендеринг сцены с использованием WebGPU.
@@ -15,10 +14,7 @@ export class WebGPURenderer {
 	public adapter: GPUAdapter | null = null
 	public device: GPUDevice | null = null
 	public context: GPUCanvasContext | null = null
-
-	// Конвейер для стандартных объектов (сплошная заливка/линии)
 	public solidPipeline: GPURenderPipeline | null = null
-	// Конвейер для объектов с цветами вершин
 	public vertexColorPipeline: GPURenderPipeline | null = null
 
 	public async init(): Promise<void> {
@@ -49,7 +45,6 @@ export class WebGPURenderer {
 			format: presentationFormat,
 		})
 
-		// --- Шейдер для сплошных объектов ---
 		const solidShaderModule = this.device.createShaderModule({
 			code: `
                 struct Uniforms {
@@ -69,7 +64,6 @@ export class WebGPURenderer {
             `,
 		})
 
-		// --- Конвейер для сплошных объектов (каркас тора) ---
 		this.solidPipeline = this.device.createRenderPipeline({
 			layout: "auto",
 			vertex: {
@@ -98,7 +92,6 @@ export class WebGPURenderer {
 			},
 		})
 
-		// --- Шейдер для объектов с цветами вершин (AxesHelper) ---
 		const vertexColorShaderModule = this.device.createShaderModule({
 			code: `
                 struct Uniforms {
@@ -131,33 +124,22 @@ export class WebGPURenderer {
             `,
 		})
 
-		// --- Конвейер для объектов с цветами вершин ---
 		this.vertexColorPipeline = this.device.createRenderPipeline({
 			layout: "auto",
 			vertex: {
 				module: vertexColorShaderModule,
 				entryPoint: "vertex_main",
 				buffers: [
-					// 0: Буфер позиций
 					{
-						arrayStride: 12, // 3 * float32
+						arrayStride: 12,
 						attributes: [
-							{
-								shaderLocation: 0,
-								offset: 0,
-								format: "float32x3",
-							},
+							{ shaderLocation: 0, offset: 0, format: "float32x3" },
 						],
 					},
-					// 1: Буфер цветов
 					{
-						arrayStride: 12, // 3 * float32
+						arrayStride: 12,
 						attributes: [
-							{
-								shaderLocation: 1,
-								offset: 0,
-								format: "float32x3",
-							},
+							{ shaderLocation: 1, offset: 0, format: "float32x3" },
 						],
 					},
 				],
@@ -179,7 +161,7 @@ export class WebGPURenderer {
 		this.canvas.height = height
 	}
 
-	public render(scene: Scene, camera: PerspectiveCamera): void {
+	public render(scene: Scene, viewPoint: ViewPoint): void {
 		const { device, context, solidPipeline, vertexColorPipeline } = this
 		if (!device || !context || !solidPipeline || !vertexColorPipeline) {
 			return
@@ -192,7 +174,7 @@ export class WebGPURenderer {
 			colorAttachments: [
 				{
 					view: textureView,
-					clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+					clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
 					loadOp: "clear",
 					storeOp: "store",
 				},
@@ -202,83 +184,36 @@ export class WebGPURenderer {
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 
 		scene.children.forEach((object: Object3D) => {
-			const modelMatrix = object.modelMatrix
 			const mvpMatrix = mat4.create()
-			const modelViewMatrix = mat4.create()
-			mat4.multiply(modelViewMatrix, camera.viewMatrix, modelMatrix)
-			mat4.multiply(mvpMatrix, camera.projectionMatrix, modelViewMatrix)
+			mat4.multiply(mvpMatrix, viewPoint.projectionMatrix, viewPoint.viewMatrix)
+			mat4.multiply(mvpMatrix, mvpMatrix, object.modelMatrix)
 
 			const uniformBuffer = device.createBuffer({
-				size: 64, // mat4x4<f32>
+				size: 64,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 			})
-			device.queue.writeBuffer(uniformBuffer, 0, mvpMatrix as Float32Array)
 
-			// --- Рендеринг LineSegments (например, AxesHelper) ---
-			if ((object as LineSegments).isLineSegments) {
-				const line = object as LineSegments
-				const material = line.material as LineBasicMaterial
+			device.queue.writeBuffer(uniformBuffer, 0, (mvpMatrix as Float32Array).buffer)
 
-				if (
-					material.vertexColors &&
-					line.geometry.attributes.position &&
-					line.geometry.attributes.color
-				) {
-					passEncoder.setPipeline(vertexColorPipeline)
-
-					const positionAttribute = line.geometry.attributes.position
-					const colorAttribute = line.geometry.attributes.color
-
-					const positionBuffer = device.createBuffer({
-						size: positionAttribute.array.byteLength,
-						usage: GPUBufferUsage.VERTEX,
-						mappedAtCreation: true,
-					})
-					new Float32Array(positionBuffer.getMappedRange()).set(positionAttribute.array as Float32Array)
-					positionBuffer.unmap()
-
-					const colorBuffer = device.createBuffer({
-						size: colorAttribute.array.byteLength,
-						usage: GPUBufferUsage.VERTEX,
-						mappedAtCreation: true,
-					})
-					new Float32Array(colorBuffer.getMappedRange()).set(colorAttribute.array as Float32Array)
-					colorBuffer.unmap()
-
-					const uniformBindGroup = device.createBindGroup({
-						layout: vertexColorPipeline.getBindGroupLayout(0),
-						entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
-					})
-					passEncoder.setBindGroup(0, uniformBindGroup)
-					passEncoder.setVertexBuffer(0, positionBuffer)
-					passEncoder.setVertexBuffer(1, colorBuffer)
-					passEncoder.draw(positionAttribute.array.length / 3, 1, 0, 0)
-				}
-			}
-			// --- Рендеринг Mesh (например, Torus) ---
-			else if ((object as Mesh).isMesh) {
+			if ((object as Mesh).isMesh) {
 				const mesh = object as Mesh
-
 				if (mesh.geometry.attributes.position && mesh.geometry.index) {
 					passEncoder.setPipeline(solidPipeline)
 
-					const positionAttribute = mesh.geometry.attributes.position
-					const indexAttribute = mesh.geometry.index
-
-					const vertexBuffer = device.createBuffer({
-						size: positionAttribute.array.byteLength,
+					const positionBuffer = device.createBuffer({
+						size: mesh.geometry.attributes.position.array.byteLength,
 						usage: GPUBufferUsage.VERTEX,
 						mappedAtCreation: true,
 					})
-					new Float32Array(vertexBuffer.getMappedRange()).set(positionAttribute.array as Float32Array)
-					vertexBuffer.unmap()
+					new Float32Array(positionBuffer.getMappedRange()).set(mesh.geometry.attributes.position.array)
+					positionBuffer.unmap()
 
 					const indexBuffer = device.createBuffer({
-						size: indexAttribute.array.byteLength,
+						size: mesh.geometry.index.array.byteLength,
 						usage: GPUBufferUsage.INDEX,
 						mappedAtCreation: true,
 					})
-					new Uint16Array(indexBuffer.getMappedRange()).set(indexAttribute.array as Uint16Array)
+					new Uint16Array(indexBuffer.getMappedRange()).set(mesh.geometry.index.array)
 					indexBuffer.unmap()
 
 					const uniformBindGroup = device.createBindGroup({
@@ -287,9 +222,40 @@ export class WebGPURenderer {
 					})
 
 					passEncoder.setBindGroup(0, uniformBindGroup)
-					passEncoder.setVertexBuffer(0, vertexBuffer)
+					passEncoder.setVertexBuffer(0, positionBuffer)
 					passEncoder.setIndexBuffer(indexBuffer, "uint16")
-					passEncoder.drawIndexed(indexAttribute.array.length, 1, 0, 0, 0)
+					passEncoder.drawIndexed(mesh.geometry.index.count)
+				}
+			} else if ((object as LineSegments).isLineSegments) {
+				const line = object as LineSegments
+				if (line.geometry.attributes.position && line.geometry.attributes.color) {
+					passEncoder.setPipeline(vertexColorPipeline)
+
+					const positionBuffer = device.createBuffer({
+						size: line.geometry.attributes.position.array.byteLength,
+						usage: GPUBufferUsage.VERTEX,
+						mappedAtCreation: true,
+					})
+					new Float32Array(positionBuffer.getMappedRange()).set(line.geometry.attributes.position.array)
+					positionBuffer.unmap()
+
+					const colorBuffer = device.createBuffer({
+						size: line.geometry.attributes.color.array.byteLength,
+						usage: GPUBufferUsage.VERTEX,
+						mappedAtCreation: true,
+					})
+					new Float32Array(colorBuffer.getMappedRange()).set(line.geometry.attributes.color.array)
+					colorBuffer.unmap()
+
+					const uniformBindGroup = device.createBindGroup({
+						layout: vertexColorPipeline.getBindGroupLayout(0),
+						entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+					})
+
+					passEncoder.setBindGroup(0, uniformBindGroup)
+					passEncoder.setVertexBuffer(0, positionBuffer)
+					passEncoder.setVertexBuffer(1, colorBuffer)
+					passEncoder.draw(line.geometry.attributes.position.count)
 				}
 			}
 		})
