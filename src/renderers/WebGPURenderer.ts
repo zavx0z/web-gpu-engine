@@ -3,37 +3,24 @@ import type { Scene } from "../scenes/Scene"
 import type { PerspectiveCamera } from "../cameras/PerspectiveCamera"
 import { Object3D } from "../core/Object3D"
 import { Mesh } from "../core/Mesh"
+import { LineSegments } from "../objects/LineSegments"
+import { LineBasicMaterial } from "../materials/LineBasicMaterial"
+import { Material } from "../materials/Material"
 
 /**
  * Отвечает за рендеринг сцены с использованием WebGPU.
  */
 export class WebGPURenderer {
-	/**
-	 * Элемент canvas, на котором происходит отрисовка.
-	 */
 	public canvas: HTMLCanvasElement | null = null
-	/**
-	 * Физическое устройство GPU.
-	 */
 	public adapter: GPUAdapter | null = null
-	/**
-	 * Логическое устройство WebGPU, используемое для выполнения команд.
-	 */
 	public device: GPUDevice | null = null
-	/**
-	 * Контекст холста, на котором происходит отрисовка.s 
-	 */
 	public context: GPUCanvasContext | null = null
-	/**
-	 * Конвейер рендеринга, содержащий шейдеры и конфигурацию.
-	 */
-	public pipeline: GPURenderPipeline | null = null
 
-	/**
-	 * Асинхронно инициализирует WebGPU, запрашивает адаптер и устройство,
-	 * создает холст и настраивает конвейер рендеринга.
-	 * @returns Promise, который разрешается после завершения инициализации.
-	 */
+	// Конвейер для стандартных объектов (сплошная заливка/линии)
+	public solidPipeline: GPURenderPipeline | null = null
+	// Конвейер для объектов с цветами вершин
+	public vertexColorPipeline: GPURenderPipeline | null = null
+
 	public async init(): Promise<void> {
 		if (!navigator.gpu) {
 			throw new Error("WebGPU не поддерживается в этом браузере.")
@@ -62,39 +49,35 @@ export class WebGPURenderer {
 			format: presentationFormat,
 		})
 
-		const shaderModule = this.device.createShaderModule({
+		// --- Шейдер для сплошных объектов ---
+		const solidShaderModule = this.device.createShaderModule({
 			code: `
-        struct Uniforms {
-          modelViewProjectionMatrix : mat4x4<f32>,
-        };
-        @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+                struct Uniforms {
+                    modelViewProjectionMatrix : mat4x4<f32>,
+                };
+                @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
-        struct VertexOutput {
-          @builtin(position) Position : vec4<f32>,
-        };
+                @vertex
+                fn vertex_main(@location(0) position : vec3<f32>) -> @builtin(position) vec4<f32> {
+                    return uniforms.modelViewProjectionMatrix * vec4<f32>(position, 1.0);
+                }
 
-        @vertex
-        fn vertex_main(@location(0) position : vec4<f32>) -> VertexOutput {
-          var output : VertexOutput;
-          output.Position = uniforms.modelViewProjectionMatrix * position;
-          return output;
-        }
-
-        @fragment
-        fn fragment_main() -> @location(0) vec4<f32> {
-          return vec4<f32>(1.0, 1.0, 1.0, 1.0);
-        }
-      `,
+                @fragment
+                fn fragment_main() -> @location(0) vec4<f32> {
+                    return vec4<f32>(1.0, 1.0, 1.0, 1.0); // Белый цвет
+                }
+            `,
 		})
 
-		this.pipeline = this.device.createRenderPipeline({
+		// --- Конвейер для сплошных объектов (каркас тора) ---
+		this.solidPipeline = this.device.createRenderPipeline({
 			layout: "auto",
 			vertex: {
-				module: shaderModule,
+				module: solidShaderModule,
 				entryPoint: "vertex_main",
 				buffers: [
 					{
-						arrayStride: 12, // 3 * 4 bytes
+						arrayStride: 12, // 3 * float32
 						attributes: [
 							{
 								shaderLocation: 0,
@@ -106,13 +89,83 @@ export class WebGPURenderer {
 				],
 			},
 			fragment: {
-				module: shaderModule,
+				module: solidShaderModule,
 				entryPoint: "fragment_main",
-				targets: [
+				targets: [{ format: presentationFormat }],
+			},
+			primitive: {
+				topology: "line-list",
+			},
+		})
+
+		// --- Шейдер для объектов с цветами вершин (AxesHelper) ---
+		const vertexColorShaderModule = this.device.createShaderModule({
+			code: `
+                struct Uniforms {
+                    modelViewProjectionMatrix : mat4x4<f32>,
+                };
+                @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+                struct VertexInput {
+                    @location(0) position : vec3<f32>,
+                    @location(1) color: vec3<f32>,
+                };
+
+                struct VertexOutput {
+                    @builtin(position) position : vec4<f32>,
+                    @location(0) color : vec4<f32>,
+                };
+
+                @vertex
+                fn vertex_main(input: VertexInput) -> VertexOutput {
+                    var output : VertexOutput;
+                    output.position = uniforms.modelViewProjectionMatrix * vec4<f32>(input.position, 1.0);
+                    output.color = vec4<f32>(input.color, 1.0);
+                    return output;
+                }
+
+                @fragment
+                fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                    return input.color;
+                }
+            `,
+		})
+
+		// --- Конвейер для объектов с цветами вершин ---
+		this.vertexColorPipeline = this.device.createRenderPipeline({
+			layout: "auto",
+			vertex: {
+				module: vertexColorShaderModule,
+				entryPoint: "vertex_main",
+				buffers: [
+					// 0: Буфер позиций
 					{
-						format: presentationFormat,
+						arrayStride: 12, // 3 * float32
+						attributes: [
+							{
+								shaderLocation: 0,
+								offset: 0,
+								format: "float32x3",
+							},
+						],
+					},
+					// 1: Буфер цветов
+					{
+						arrayStride: 12, // 3 * float32
+						attributes: [
+							{
+								shaderLocation: 1,
+								offset: 0,
+								format: "float32x3",
+							},
+						],
 					},
 				],
+			},
+			fragment: {
+				module: vertexColorShaderModule,
+				entryPoint: "fragment_main",
+				targets: [{ format: presentationFormat }],
 			},
 			primitive: {
 				topology: "line-list",
@@ -120,27 +173,15 @@ export class WebGPURenderer {
 		})
 	}
 
-	/**
-	 * Устанавливает размер холста для рендеринга.
-	 * @param width Ширина.
-	 * @param height Высота.
-	 */
 	public setSize(width: number, height: number): void {
-		if (!this.canvas) {
-			return
-		}
+		if (!this.canvas) return
 		this.canvas.width = width
 		this.canvas.height = height
 	}
 
-	/**
-	 * Рендерит один кадр сцены.
-	 * @param scene Сцена для рендеринга.
-	 * @param camera Камера, с точки зрения которой происходит рендеринг.
-	 */
 	public render(scene: Scene, camera: PerspectiveCamera): void {
-		const { device, context, pipeline } = this
-		if (!device || !context || !pipeline) {
+		const { device, context, solidPipeline, vertexColorPipeline } = this
+		if (!device || !context || !solidPipeline || !vertexColorPipeline) {
 			return
 		}
 
@@ -159,69 +200,97 @@ export class WebGPURenderer {
 		}
 
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
-		passEncoder.setPipeline(pipeline)
 
 		scene.children.forEach((object: Object3D) => {
-			if ((object as Mesh).isMesh) {
-                const mesh = object as Mesh
+			const modelMatrix = object.modelMatrix
+			const mvpMatrix = mat4.create()
+			const modelViewMatrix = mat4.create()
+			mat4.multiply(modelViewMatrix, camera.viewMatrix, modelMatrix)
+			mat4.multiply(mvpMatrix, camera.projectionMatrix, modelViewMatrix)
 
-                if (!mesh.geometry || !mesh.geometry.attributes.position || !mesh.geometry.index) {
-                    return
-                }
+			const uniformBuffer = device.createBuffer({
+				size: 64, // mat4x4<f32>
+				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+			})
+			device.queue.writeBuffer(uniformBuffer, 0, mvpMatrix as Float32Array)
 
-                const positionAttribute = mesh.geometry.attributes.position
-                const indexAttribute = mesh.geometry.index
+			// --- Рендеринг LineSegments (например, AxesHelper) ---
+			if ((object as LineSegments).isLineSegments) {
+				const line = object as LineSegments
+				const material = line.material as LineBasicMaterial
 
-				const vertexBuffer = device.createBuffer({
-					size: positionAttribute.array.byteLength,
-					usage: GPUBufferUsage.VERTEX,
-					mappedAtCreation: true,
-				})
-				new Float32Array(vertexBuffer.getMappedRange()).set(
-					positionAttribute.array as Float32Array
-				)
-				vertexBuffer.unmap()
+				if (
+					material.vertexColors &&
+					line.geometry.attributes.position &&
+					line.geometry.attributes.color
+				) {
+					passEncoder.setPipeline(vertexColorPipeline)
 
-				const indexBuffer = device.createBuffer({
-					size: indexAttribute.array.byteLength,
-					usage: GPUBufferUsage.INDEX,
-					mappedAtCreation: true,
-				})
-				new Uint16Array(indexBuffer.getMappedRange()).set(
-					indexAttribute.array as Uint16Array
-				)
-				indexBuffer.unmap()
+					const positionAttribute = line.geometry.attributes.position
+					const colorAttribute = line.geometry.attributes.color
 
-				const mvpMatrix = mat4.create()
-				const modelViewMatrix = mat4.create()
-				mat4.multiply(modelViewMatrix, camera.viewMatrix, mesh.modelMatrix)
-				mat4.multiply(mvpMatrix, camera.projectionMatrix, modelViewMatrix)
+					const positionBuffer = device.createBuffer({
+						size: positionAttribute.array.byteLength,
+						usage: GPUBufferUsage.VERTEX,
+						mappedAtCreation: true,
+					})
+					new Float32Array(positionBuffer.getMappedRange()).set(positionAttribute.array as Float32Array)
+					positionBuffer.unmap()
 
-				const uniformBuffer = device.createBuffer({
-					size: 64, // mat4x4<f32>
-					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-				})
+					const colorBuffer = device.createBuffer({
+						size: colorAttribute.array.byteLength,
+						usage: GPUBufferUsage.VERTEX,
+						mappedAtCreation: true,
+					})
+					new Float32Array(colorBuffer.getMappedRange()).set(colorAttribute.array as Float32Array)
+					colorBuffer.unmap()
 
-				device.queue.writeBuffer(
-					uniformBuffer,
-					0,
-					new Float32Array(mvpMatrix),
-				)
+					const uniformBindGroup = device.createBindGroup({
+						layout: vertexColorPipeline.getBindGroupLayout(0),
+						entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+					})
+					passEncoder.setBindGroup(0, uniformBindGroup)
+					passEncoder.setVertexBuffer(0, positionBuffer)
+					passEncoder.setVertexBuffer(1, colorBuffer)
+					passEncoder.draw(positionAttribute.array.length / 3, 1, 0, 0)
+				}
+			}
+			// --- Рендеринг Mesh (например, Torus) ---
+			else if ((object as Mesh).isMesh) {
+				const mesh = object as Mesh
 
-				const uniformBindGroup = device.createBindGroup({
-					layout: pipeline.getBindGroupLayout(0),
-					entries: [
-						{
-							binding: 0,
-							resource: { buffer: uniformBuffer },
-						},
-					],
-				})
+				if (mesh.geometry.attributes.position && mesh.geometry.index) {
+					passEncoder.setPipeline(solidPipeline)
 
-				passEncoder.setBindGroup(0, uniformBindGroup)
-				passEncoder.setVertexBuffer(0, vertexBuffer)
-				passEncoder.setIndexBuffer(indexBuffer, "uint16")
-				passEncoder.drawIndexed(indexAttribute.array.length, 1, 0, 0, 0)
+					const positionAttribute = mesh.geometry.attributes.position
+					const indexAttribute = mesh.geometry.index
+
+					const vertexBuffer = device.createBuffer({
+						size: positionAttribute.array.byteLength,
+						usage: GPUBufferUsage.VERTEX,
+						mappedAtCreation: true,
+					})
+					new Float32Array(vertexBuffer.getMappedRange()).set(positionAttribute.array as Float32Array)
+					vertexBuffer.unmap()
+
+					const indexBuffer = device.createBuffer({
+						size: indexAttribute.array.byteLength,
+						usage: GPUBufferUsage.INDEX,
+						mappedAtCreation: true,
+					})
+					new Uint16Array(indexBuffer.getMappedRange()).set(indexAttribute.array as Uint16Array)
+					indexBuffer.unmap()
+
+					const uniformBindGroup = device.createBindGroup({
+						layout: solidPipeline.getBindGroupLayout(0),
+						entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+					})
+
+					passEncoder.setBindGroup(0, uniformBindGroup)
+					passEncoder.setVertexBuffer(0, vertexBuffer)
+					passEncoder.setIndexBuffer(indexBuffer, "uint16")
+					passEncoder.drawIndexed(indexAttribute.array.length, 1, 0, 0, 0)
+				}
 			}
 		})
 
