@@ -2,84 +2,50 @@ if (import.meta.hot) {
 	import.meta.hot.accept()
 }
 
-import {
-	WebGPURenderer,
-	Scene,
-	ViewPoint,
-	Mesh,
-	TorusGeometry,
-	BasicMaterial,
-	AxesHelper,
-	mat4,
-} from "../src/WebGPUEngine"
+import { mat4 } from "gl-matrix"
+import { BasicMaterial, Mesh, Scene, TorusGeometry, ViewPoint, WebGPURenderer } from "../src/WebGPUEngine"
 
-/**
- * Главная функция для инициализации и запуска WebGPU приложения.
- */
-async function main() {
-	// Создание и инициализация рендерера
+document.addEventListener("DOMContentLoaded", async () => {
 	const renderer = new WebGPURenderer()
 	await renderer.init()
 
-	// Создание сцены
-	const scene = new Scene()
+	if (renderer.canvas) {
+		document.body.appendChild(renderer.canvas)
 
-	// Создание точки обзора (камеры и управления)
-	const viewPoint = new ViewPoint({
-		element: renderer.canvas!,
-		fov: (2 * Math.PI) / 5,
-		aspect: window.innerWidth / window.innerHeight,
-		near: 0.1,
-		far: 100.0,
-	})
+		const scene = new Scene()
 
-	// Создание геометрии и материала для тора
-	const geometry = new TorusGeometry({
-		radius: 0.4,
-		tube: 0.2,
-		radialSegments: 32,
-		tubularSegments: 16,
-	})
-	const material = new BasicMaterial()
-	const torus = new Mesh(geometry, material)
+		const viewPoint = new ViewPoint({
+			element: renderer.canvas,
+			fov: (2 * Math.PI) / 5,
+		})
 
-	// Добавление тора на сцену
-	scene.add(torus)
+		const geometry = new TorusGeometry({ radius: 0.5, tube: 0.2, radialSegments: 32, tubularSegments: 24 })
+		// Исправлен формат цвета на массив [r, g, b, a]
+		const material = new BasicMaterial({ color: [1.0, 0.8, 0.0, 1.0] })
+		// Исправлен вызов конструктора Mesh на новый формат с одним объектом
+		const mesh = new Mesh({ geometry, material })
+		scene.add(mesh)
 
-	// Добавление осей координат
-	const axesHelper = new AxesHelper(1)
-	scene.add(axesHelper)
+		const modelMatrix = mat4.create()
 
-	// Обработчик изменения размера окна
-	window.addEventListener("resize", () => {
-		const width = window.innerWidth
-		const height = window.innerHeight
+		function animate() {
+			mat4.rotateY(modelMatrix, modelMatrix, 0.01)
+			mesh.modelMatrix = modelMatrix
 
-		// Обновляем размер холста
-		renderer.setSize(width, height)
+			renderer.render(scene, viewPoint)
+			requestAnimationFrame(animate)
+		}
 
-		// Обновляем соотношение сторон камеры и матрицу проекции
-		viewPoint.aspect = width / height
-		viewPoint.updateProjectionMatrix()
-	})
+		function handleResize() {
+			const width = window.innerWidth
+			const height = window.innerHeight
+			renderer.setSize(width, height)
+			viewPoint.setAspectRatio(width, height)
+		}
 
-	/**
-	 * Функция анимации, которая вызывается на каждом кадре.
-	 */
-	function animate() {
-		// Вращаем тор вокруг своей оси Y
-		mat4.rotate(torus.modelMatrix, torus.modelMatrix, 0.01, [0, 1, 0])
+		window.addEventListener("resize", handleResize)
 
-		// ViewPoint сам обновляется при вводе пользователя, поэтому
-		// дополнительно вызывать update() для него не нужно, он уже это делает внутри себя.
-
-		// Рендеринг сцены
-		renderer.render(scene, viewPoint)
-		requestAnimationFrame(animate)
+		handleResize()
+		animate()
 	}
-
-	// Запуск анимации
-	animate()
-}
-
-main()
+})
