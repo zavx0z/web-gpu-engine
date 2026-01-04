@@ -3,6 +3,7 @@ if (import.meta.hot) {
 }
 
 import { mat4 } from "gl-matrix"
+import { AxesHelper } from "../src/helpers/AxesHelper"
 import { BasicMaterial, Mesh, Scene, TorusGeometry, ViewPoint, WebGPURenderer } from "../src/WebGPUEngine"
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -14,15 +15,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 		const scene = new Scene()
 
+		const axesHelper = new AxesHelper({ size: 2 })
+		scene.add(axesHelper)
+
 		const viewPoint = new ViewPoint({
 			element: renderer.canvas,
 			fov: (2 * Math.PI) / 5,
 		})
 
 		const geometry = new TorusGeometry({ radius: 0.5, tube: 0.2, radialSegments: 32, tubularSegments: 24 })
-		// Исправлен формат цвета на массив [r, g, b, a]
 		const material = new BasicMaterial({ color: [1.0, 0.8, 0.0, 1.0] })
-		// Исправлен вызов конструктора Mesh на новый формат с одним объектом
 		const mesh = new Mesh({ geometry, material })
 		scene.add(mesh)
 

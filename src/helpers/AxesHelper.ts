@@ -4,16 +4,34 @@ import { LineBasicMaterial } from "../materials/LineBasicMaterial"
 import { LineSegments } from "../objects/LineSegments"
 
 /**
+ * Параметры для создания AxesHelper.
+ */
+interface AxesHelperParameters {
+	/**
+	 * Длина осей.
+	 * @default 1
+	 * @min 0
+	 */
+	size?: number
+}
+
+/**
  * Помощник для визуализации осей координат (X, Y, Z).
  * @see https://threejs.org/docs/#api/en/helpers/AxesHelper
  */
 export class AxesHelper extends LineSegments {
-    public type = "AxesHelper"
+	public type = "AxesHelper"
 
 	/**
-	 * @param size Длина осей. По умолчанию 1.
+	 * @param parameters Параметры для создания помощника.
 	 */
-	constructor(size: number = 1) {
+	constructor(parameters: AxesHelperParameters = {}) {
+		const { size = 1 } = parameters
+
+		if (size < 0) {
+			throw new Error("Размер не может быть отрицательным")
+		}
+
 		const vertices = [
 			0, 0, 0, size, 0, 0, 0, 0, 0, 0, size, 0, 0, 0, 0, 0, 0, size,
 		]
