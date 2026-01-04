@@ -5,6 +5,7 @@ import { Object3D } from "../core/Object3D"
 import { Mesh } from "../core/Mesh"
 import { LineSegments } from "../objects/LineSegments"
 import { LineBasicMaterial } from "../materials/LineBasicMaterial"
+import { BasicMaterial } from "../materials/BasicMaterial"
 
 /**
  * Отвечает за рендеринг сцены с использованием WebGPU.
@@ -47,19 +48,24 @@ export class WebGPURenderer {
 
 		const solidShaderModule = this.device.createShaderModule({
 			code: `
-                struct Uniforms {
+                struct CameraUniforms {
                     modelViewProjectionMatrix : mat4x4<f32>,
                 };
-                @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+                @binding(0) @group(0) var<uniform> cameraUniforms : CameraUniforms;
+
+				struct MaterialUniforms {
+					color: vec4<f32>,
+				};
+				@binding(1) @group(0) var<uniform> materialUniforms : MaterialUniforms;
 
                 @vertex
                 fn vertex_main(@location(0) position : vec3<f32>) -> @builtin(position) vec4<f32> {
-                    return uniforms.modelViewProjectionMatrix * vec4<f32>(position, 1.0);
+                    return cameraUniforms.modelViewProjectionMatrix * vec4<f32>(position, 1.0);
                 }
 
                 @fragment
                 fn fragment_main() -> @location(0) vec4<f32> {
-                    return vec4<f32>(1.0, 1.0, 1.0, 1.0); // Белый цвет
+                    return materialUniforms.color;
                 }
             `,
 		})
@@ -88,7 +94,7 @@ export class WebGPURenderer {
 				targets: [{ format: presentationFormat }],
 			},
 			primitive: {
-				topology: "line-list",
+				topology: "triangle-list",
 			},
 		})
 
@@ -188,17 +194,23 @@ export class WebGPURenderer {
 			mat4.multiply(mvpMatrix, viewPoint.projectionMatrix, viewPoint.viewMatrix)
 			mat4.multiply(mvpMatrix, mvpMatrix, object.modelMatrix)
 
-			const uniformBuffer = device.createBuffer({
-				size: 64,
+			const cameraUniformBuffer = device.createBuffer({
+				size: 64, // mat4x4<f32>
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 			})
-
-			device.queue.writeBuffer(uniformBuffer, 0, (mvpMatrix as Float32Array).buffer)
+			device.queue.writeBuffer(cameraUniformBuffer, 0, (mvpMatrix as Float32Array).buffer)
 
 			if ((object as Mesh).isMesh) {
 				const mesh = object as Mesh
-				if (mesh.geometry.attributes.position && mesh.geometry.index) {
+				const material = mesh.material as BasicMaterial
+				if (material && mesh.geometry.attributes.position && mesh.geometry.index) {
 					passEncoder.setPipeline(solidPipeline)
+
+					const materialUniformBuffer = device.createBuffer({
+						size: 16, // vec4<f32>
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					})
+					device.queue.writeBuffer(materialUniformBuffer, 0, new Float32Array(material.color))
 
 					const positionBuffer = device.createBuffer({
 						size: mesh.geometry.attributes.position.array.byteLength,
@@ -218,7 +230,10 @@ export class WebGPURenderer {
 
 					const uniformBindGroup = device.createBindGroup({
 						layout: solidPipeline.getBindGroupLayout(0),
-						entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+						entries: [
+							{ binding: 0, resource: { buffer: cameraUniformBuffer } },
+							{ binding: 1, resource: { buffer: materialUniformBuffer } },
+						],
 					})
 
 					passEncoder.setBindGroup(0, uniformBindGroup)
@@ -250,7 +265,7 @@ export class WebGPURenderer {
 
 					const uniformBindGroup = device.createBindGroup({
 						layout: vertexColorPipeline.getBindGroupLayout(0),
-						entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+						entries: [{ binding: 0, resource: { buffer: cameraUniformBuffer } }],
 					})
 
 					passEncoder.setBindGroup(0, uniformBindGroup)
