@@ -3,21 +3,36 @@ import { BufferGeometry } from "./BufferGeometry"
 import { Material } from "../materials/Material"
 
 /**
+ * Параметры для создания полигональной сетки.
+ */
+export interface MeshParameters {
+	/**
+	 * Геометрия сетки, определяющая ее форму.
+	 */
+	geometry: BufferGeometry
+	/**
+	 * Материал (или массив материалов), определяющий внешний вид сетки.
+	 */
+	material: Material | Material[]
+}
+
+/**
  * Класс для треугольных полигональных сеток.
  * @see https://threejs.org/docs/#api/en/objects/Mesh
  */
 export class Mesh extends Object3D {
 	public readonly isMesh: true = true
 	public type = "Mesh"
+	public geometry: BufferGeometry
+	public material: Material | Material[]
 
 	/**
-	 * @param geometry Геометрия сетки.
-	 * @param material Материал сетки.
+	 * @param parameters Параметры для создания сетки.
 	 */
-	constructor(
-		public geometry: BufferGeometry,
-		public material: Material | Material[]
-	) {
+	constructor(parameters: MeshParameters) {
 		super()
+		const { geometry, material } = parameters
+		this.geometry = geometry
+		this.material = material
 	}
 }
