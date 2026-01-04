@@ -42,6 +42,19 @@ async function main() {
 	// Добавление тора на сцену
 	scene.add(torus)
 
+	// Обработчик изменения размера окна
+	window.addEventListener("resize", () => {
+		const width = window.innerWidth
+		const height = window.innerHeight
+
+		// Обновляем размер холста
+		renderer.setSize(width, height)
+
+		// Обновляем соотношение сторон камеры и матрицу проекции
+		camera.aspect = width / height
+		camera.updateProjectionMatrix()
+	})
+
 	/**
 	 * Функция анимации, которая вызывается на каждом кадре.
 	 */

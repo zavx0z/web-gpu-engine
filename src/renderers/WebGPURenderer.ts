@@ -8,6 +8,10 @@ import type { Mesh } from "../core/Mesh"
  */
 export class WebGPURenderer {
 	/**
+	 * Элемент canvas, на котором происходит отрисовка.
+	 */
+	public canvas: HTMLCanvasElement | null = null
+	/**
 	 * Физическое устройство GPU.
 	 */
 	public adapter: GPUAdapter | null = null
@@ -41,12 +45,12 @@ export class WebGPURenderer {
 
 		this.device = await this.adapter.requestDevice()
 
-		const canvas = document.createElement("canvas")
-		canvas.width = window.innerWidth
-		canvas.height = window.innerHeight
-		document.body.appendChild(canvas)
+		this.canvas = document.createElement("canvas")
+		this.canvas.width = window.innerWidth
+		this.canvas.height = window.innerHeight
+		document.body.appendChild(this.canvas)
 
-		this.context = canvas.getContext("webgpu")
+		this.context = this.canvas.getContext("webgpu")
 		if (!this.context) {
 			throw new Error("Не удалось получить контекст WebGPU.")
 		}
@@ -113,6 +117,19 @@ export class WebGPURenderer {
 				topology: "line-list",
 			},
 		})
+	}
+
+	/**
+	 * Устанавливает размер холста для рендеринга.
+	 * @param width Ширина.
+	 * @param height Высота.
+	 */
+	public setSize(width: number, height: number): void {
+		if (!this.canvas) {
+			return
+		}
+		this.canvas.width = width
+		this.canvas.height = height
 	}
 
 	/**
