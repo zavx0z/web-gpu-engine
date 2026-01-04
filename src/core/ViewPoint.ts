@@ -13,12 +13,6 @@ export interface ViewPointParameters {
 	 */
 	fov?: number
 	/**
-	 * Соотношение сторон.
-	 * @default 1
-	 * @min 0
-	 */
-	aspect?: number
-	/**
 	 * Ближняя плоскость отсечения.
 	 * @default 0.1
 	 * @min 0
@@ -71,23 +65,35 @@ export class ViewPoint {
 	 * @param parameters Параметры для создания точки обзора.
 	 */
 	constructor(parameters: ViewPointParameters) {
-		const { element, fov = 1, aspect = 1, near = 0.1, far = 100 } = parameters
+		const { element, fov = 1, near = 0.1, far = 100 } = parameters
 
 		this.element = element
 		this.fov = fov
-		this.aspect = aspect
 		this.near = near
 		this.far = far
 
 		// Валидация параметров
 		if (fov <= 0) throw new Error("Угол обзора (fov) должен быть больше нуля.")
-		if (aspect <= 0) throw new Error("Соотношение сторон (aspect) должно быть больше нуля.")
 		if (near <= 0) throw new Error("Ближняя плоскость отсечения (near) должна быть больше нуля.")
 		if (far <= near) throw new Error("Дальняя плоскость отсечения (far) должна быть больше ближней (near).")
+
+		// Вычисляем начальное соотношение сторон из размеров элемента
+		this.aspect = element.clientWidth / element.clientHeight
 
 		this.updateProjectionMatrix()
 		this.attachEventListeners()
 		this.update()
+	}
+
+	/**
+	 * Обновляет соотношение сторон и матрицу проекции.
+	 * @param width Новая ширина элемента (в CSS-пикселях).
+	 * @param height Новая высота элемента (в CSS-пикселях).
+	 */
+	public setAspectRatio(width: number, height: number): void {
+		if (width <= 0 || height <= 0) return
+		this.aspect = width / height
+		this.updateProjectionMatrix()
 	}
 
 	/** Обновляет матрицу проекции. */
