@@ -1,7 +1,7 @@
 /**
  * Параметры для создания геометрии тора.
  */
-interface TorusGeometryParameters {
+export interface TorusGeometryParameters {
 	/**
 	 * Радиус тора от центра до центра "трубы".
 	 * @default 0.5

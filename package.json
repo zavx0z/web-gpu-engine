@@ -1,16 +1,28 @@
 {
-	"name": "bun-project",
-	"module": "serve.ts",
-	"type": "module",
-	"devDependencies": {
-		"@webgpu/types": "^0.1.68",
-		"bun-types": "latest"
-	},
-	"peerDependencies": {
-		"typescript": "^5.9.3"
-	},
-	"dependencies": {
-		"@types/gl-matrix": "^3.2.0",
-		"gl-matrix": "^3.4.4"
-	}
+  "name": "webgpu-engine",
+  "version": "1.0.0",
+  "description": "A lightweight WebGPU rendering engine inspired by three.js.",
+  "main": "src/WebGPUEngine.js",
+  "scripts": {
+    "dev": "bun --hot ./index.html",
+    "build": "bun build ./index.html --outdir ./dist",
+    "typecheck": "tsc --noEmit",
+    "build:docs": "typedoc",
+    "deploy:app": "echo 'Deploying app... Instruction for Gemini AI.'",
+    "deploy:docs": "echo 'Deploying docs... Instruction for Gemini AI.'"
+  },
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "engine",
+    "three.js"
+  ],
+  "author": "zavx0z",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@webgpu/types": "^0.1.68",
+    "typedoc": "^0.25.13",
+    "typescript": "^5.4.5"
+  }
 }

@@ -11,7 +11,7 @@ import {
 	BasicMaterial,
 	vec3,
 	mat4,
-} from "../src/WebGPUEngine.js"
+} from "../src/WebGPUEngine"
 
 /**
  * Главная функция для инициализации и запуска WebGPU приложения.
@@ -25,12 +25,12 @@ async function main() {
 	const scene = new Scene()
 
 	// Создание камеры
-	const camera = new PerspectiveCamera(
-		(2 * Math.PI) / 5,
-		window.innerWidth / window.innerHeight,
-		0.1,
-		100.0,
-	)
+	const camera = new PerspectiveCamera({
+		fov: (2 * Math.PI) / 5,
+		aspect: window.innerWidth / window.innerHeight,
+		near: 0.1,
+		far: 100.0,
+	})
 	camera.position[2] = 2 // Позиционирование камеры
 	camera.lookAt(vec3.fromValues(0, 0, 0)) // Направление камеры
 

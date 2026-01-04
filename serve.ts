@@ -1,4 +1,4 @@
-import main from "./examples/index.html"
+import main from "./index.html"
 
 Bun.serve({
 	// Используем порт из переменной окружения $PORT, по умолчанию 3000

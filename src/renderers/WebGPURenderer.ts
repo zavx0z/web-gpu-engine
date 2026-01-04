@@ -195,7 +195,7 @@ export class WebGPURenderer {
 				device.queue.writeBuffer(
 					uniformBuffer,
 					0,
-					mvpMatrix as Float32Array,
+					new Float32Array(mvpMatrix),
 				)
 
 				const uniformBindGroup = device.createBindGroup({
