@@ -1,10 +1,27 @@
-import { Line } from "./Line"
+import { BufferGeometry } from "../core/BufferGeometry"
+import { Material } from "../materials/Material"
+import { Object3D } from "../core/Object3D"
 
 /**
- * Набор отрезков, соединяющих пары вершин.
- * @see https://threejs.org/docs/#api/en/objects/LineSegments
+ * Объект для отрисовки геометрии в виде набора линий.
  */
-export class LineSegments extends Line {
-	public readonly isLineSegments: true = true
-	public type = "LineSegments"
+export class LineSegments extends Object3D {
+	/**
+	 * Геометрия объекта.
+	 */
+	public geometry: BufferGeometry
+	/**
+	 * Материал объекта.
+	 */
+	public material: Material
+
+	/**
+	 * @param geometry Геометрия, определяющая форму объекта.
+	 * @param material Материал, определяющий внешний вид объекта.
+	 */
+	constructor(geometry: BufferGeometry, material: Material) {
+		super()
+		this.geometry = geometry
+		this.material = material
+	}
 }

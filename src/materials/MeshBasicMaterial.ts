@@ -1,13 +1,13 @@
 import { Color } from "../math/Color"
-import { Material } from "./Material"
+import { Material, MaterialParameters } from "./Material"
 
 /**
- * Параметры для создания MeshBasicMaterial.
+ * Параметры для создания {@link MeshBasicMaterial}.
  */
-interface MeshBasicMaterialParameters {
+export interface MeshBasicMaterialParameters extends MaterialParameters {
 	/**
 	 * Цвет материала.
-	 * @default 0xff00ff (ярко-розовый для отладки)
+	 * @default 0xffffff (белый)
 	 */
 	color?: number | Color
 }
@@ -22,18 +22,15 @@ export class MeshBasicMaterial extends Material {
 	public color: Color
 
 	/**
-	 * Создает экземпляр MeshBasicMaterial.
-	 * @param {MeshBasicMaterialParameters} parameters - Параметры для материала.
+	 * @param parameters Параметры для материала.
 	 */
 	constructor(parameters: MeshBasicMaterialParameters = {}) {
-		super()
+		super(parameters)
+
 		if (parameters.color instanceof Color) {
 			this.color = parameters.color.clone()
-		} else if (typeof parameters.color === 'number') {
-			this.color = new Color(parameters.color)
 		} else {
-			// Меняем цвет по умолчанию на розовый для отладки
-			this.color = new Color(0xff00ff)
+			this.color = new Color(parameters.color)
 		}
 	}
 }

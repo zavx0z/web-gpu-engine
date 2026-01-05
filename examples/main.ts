@@ -8,6 +8,7 @@ import {
 	ViewPoint,
 	WebGPURenderer,
 	GLTFLoader,
+	GridHelper,
 } from "../src/WebGPUEngine"
 
 // --- CSS для полноэкранного режима ---
@@ -45,10 +46,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 	const viewPoint = new ViewPoint({
 		element: renderer.canvas,
 		fov: (2 * Math.PI) / 5,
-		position: { x: 0, y: 300, z: 600 },
+		position: { x: 0, y: 800, z: 1000 },
 		near: 0.1,
 		far: 2000,
 	})
+
+	const grid = new GridHelper(1000, 20)
+	scene.add(grid)
 
 	// --- Обработчик изменения размера окна ---
 	window.addEventListener("resize", () => {
