@@ -142,12 +142,14 @@ export class ViewPoint {
 		const touches = event.touches
 
 		switch (touches.length) {
-			case 1:
+			case 1: // Начало вращения
+				this.isPanning = false
 				this.isRotating = true
 				this.lastX = touches[0].clientX
 				this.lastY = touches[0].clientY
 				break
-			case 2:
+			case 2: // Начало панорамирования/зума
+				this.isRotating = false
 				this.isPanning = true
 				const dx = touches[0].clientX - touches[1].clientX
 				const dy = touches[0].clientY - touches[1].clientY
@@ -173,6 +175,7 @@ export class ViewPoint {
 			this.lastY = touches[0].clientY
 			this.update()
 		} else if (touches.length === 2 && this.isPanning) {
+			// Зум
 			const dx = touches[0].clientX - touches[1].clientX
 			const dy = touches[0].clientY - touches[1].clientY
 			const currentTouchDistance = Math.sqrt(dx * dx + dy * dy)
@@ -182,6 +185,7 @@ export class ViewPoint {
 			}
 			this.lastTouchDistance = currentTouchDistance
 
+			// Панорамирование
 			const currentMidX = (touches[0].clientX + touches[1].clientX) / 2
 			const currentMidY = (touches[0].clientY + touches[1].clientY) / 2
 			const deltaX = currentMidX - this.lastX
@@ -196,12 +200,36 @@ export class ViewPoint {
 	}
 
 	private onTouchEnd = (event: TouchEvent) => {
-		if (event.touches.length < 2) {
+		event.preventDefault()
+		const touches = event.touches
+
+		// Все пальцы убраны, сбрасываем состояние
+		if (touches.length === 0) {
+			this.isRotating = false
 			this.isPanning = false
 			this.lastTouchDistance = null
+			return
 		}
-		if (event.touches.length < 1) {
+
+		// Переход от панорамирования/зума к вращению (с 2 на 1 палец)
+		if (touches.length === 1) {
+			this.isPanning = false
+			this.lastTouchDistance = null
+
+			// Переключаемся на вращение и обновляем точку отсчета,
+			// чтобы предотвратить "прыжок" камеры.
+			this.isRotating = true
+			this.lastX = touches[0].clientX
+			this.lastY = touches[0].clientY
+		} else if (touches.length === 2) {
+			// Обрабатываем случай, когда было 3+ пальца и осталось 2
 			this.isRotating = false
+			this.isPanning = true
+			const dx = touches[0].clientX - touches[1].clientX
+			const dy = touches[0].clientY - touches[1].clientY
+			this.lastTouchDistance = Math.sqrt(dx * dx + dy * dy)
+			this.lastX = (touches[0].clientX + touches[1].clientX) / 2
+			this.lastY = (touches[0].clientY + touches[1].clientY) / 2
 		}
 	}
 
