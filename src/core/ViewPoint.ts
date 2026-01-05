@@ -171,7 +171,14 @@ export class ViewPoint {
 
 	private onWheel = (event: WheelEvent) => {
 		event.preventDefault()
-		this.handleZoom(event.deltaY)
+		// Жесты трекпада:
+		// - обычный двухпальцевый скролл — панорамирование;
+		// - pinch — зум. На macOS pinch, как правило, даёт ctrlKey=true.
+		if (event.ctrlKey) {
+			this.handleZoom(event.deltaY)
+		} else {
+			this.handlePan(event.deltaX, event.deltaY)
+		}
 		this.update()
 	}
 
@@ -182,23 +189,44 @@ export class ViewPoint {
 	 */
 	private handleRotation(deltaX: number, deltaY: number) {
 		const rotationSpeed = 0.005
-		this.theta -= deltaX * rotationSpeed
-		this.phi -= deltaY * rotationSpeed
+		// Инвертируем направление вращения:
+		// - движение мышью/пальцем вправо вращает сцену визуально вправо;
+		// - движение вверх наклоняет сцену так, будто объект "уходит" вверх.
+		this.theta += deltaX * rotationSpeed
+		this.phi += deltaY * rotationSpeed
 		this.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.phi))
 	}
 
 	/**
-	 * Обрабатывает панорамирование (перемещение) камеры.
-	 * @param deltaX Смещение по горизонтали.
-	 * @param deltaY Смещение по вертикали.
+	 * Обрабатывает панорамирование (перемещение точки обзора) в экранных координатах.
+	 *
+	 * Жесты интерпретируются так:
+	 * - движение двумя пальцами вправо (deltaX > 0) смещает ViewPoint вправо, объект уезжает влево;
+	 * - движение двумя пальцами вверх (deltaY < 0 на Mac) смещает ViewPoint вверх, объект уезжает вниз.
+	 *
+	 * Для этого мы работаем не в мировых осях, а в базисе самой камеры.
+	 * @param deltaX Смещение жеста по горизонтали в экранных координатах.
+	 * @param deltaY Смещение жеста по вертикали в экранных координатах.
 	 */
 	private handlePan(deltaX: number, deltaY: number) {
-		// Скорость панорамирования зависит от расстояния до цели
+		// Скорость панорамирования зависит от расстояния до цели, чтобы ощущение было одинаковым
 		const panSpeed = 0.001 * this.radius
-		const me = this.viewMatrix.elements
-		const right = new Vector3(me[0], me[4], me[8]).multiplyScalar(-deltaX * panSpeed)
-		const up = new Vector3(me[1], me[5], me[9]).multiplyScalar(deltaY * panSpeed)
-		this.target.add(right).add(up)
+
+		// Направление "вперёд" камеры (от позиции к цели)
+		const viewDir = new Vector3().subVectors(this.target, this.position).normalize()
+		// Ось вправо в базисе камеры
+		const right = new Vector3().crossVectors(viewDir, this.up).normalize()
+		// Ось вверх в базисе камеры (экранный "верх")
+		const up = new Vector3().crossVectors(right, viewDir).normalize()
+
+		// deltaX > 0 — двигаем ViewPoint вправо вдоль оси right → объект визуально едет влево
+		const moveRight = right.clone().multiplyScalar(deltaX * panSpeed)
+		// На Mac при "натуральном" скролле жест вверх даёт deltaY < 0.
+		// Мы хотим, чтобы объект уезжал вниз, значит ViewPoint должен сместиться вверх:
+		// используем -deltaY.
+		const moveUp = up.clone().multiplyScalar(-deltaY * panSpeed)
+
+		this.target.add(moveRight).add(moveUp)
 	}
 
 	/**
@@ -206,8 +234,9 @@ export class ViewPoint {
 	 * @param deltaY Значение прокрутки по оси Y.
 	 */
 	private handleZoom(deltaY: number) {
-		// Используем Math.pow для плавного и пропорционального масштабирования
-		const scale = Math.pow(0.95, deltaY * 0.02)
+		// Используем Math.pow для плавного и пропорционального масштабирования.
+		// Инвертируем направление жеста pinch: разводим пальцы — приближение.
+		const scale = Math.pow(0.95, -deltaY * 0.02)
 		this.radius *= scale
 		// Ограничиваем минимальный радиус, чтобы камера не "влетела" внутрь цели.
 		this.radius = Math.max(0.5, this.radius)
