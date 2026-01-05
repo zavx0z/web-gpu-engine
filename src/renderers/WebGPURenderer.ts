@@ -9,8 +9,8 @@ import { Matrix4 } from "../math/Matrix4"
 // --- Константы для динамических uniform-буферов ---
 const UNIFORM_ALIGNMENT = 256
 const MAX_RENDERABLES = 1000
-// УПРОЩАЕМ: Размер данных только для цвета (vec4<f32>).
-const PER_OBJECT_DATA_SIZE = Math.ceil(16 / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT // Будет 256
+// Размер данных: mat4x4<f32> (64 байта) + vec4<f32> (16 байт) = 80 байт. Выравниваем до 256.
+const PER_OBJECT_DATA_SIZE = Math.ceil((64 + 16) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT
 
 interface GeometryBuffers {
 	positionBuffer: GPUBuffer
@@ -69,7 +69,7 @@ export class WebGPURenderer {
 		if (!this.device || !this.presentationFormat) return
 
 		this.globalUniformBuffer = this.device.createBuffer({
-			size: 64,
+			size: 64, // mat4x4<f32>
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 		})
 
@@ -91,7 +91,8 @@ export class WebGPURenderer {
 			entries: [
 				{
 					binding: 0,
-					visibility: GPUShaderStage.FRAGMENT, // Цвет нужен только во фрагментном шейдере
+					// Данные теперь используются в обоих шейдерах
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
 					buffer: { type: "uniform", hasDynamicOffset: true },
 				},
 			],
@@ -123,7 +124,7 @@ export class WebGPURenderer {
 				entryPoint: "vs_main",
 				buffers: [
 					{
-						arrayStride: 12,
+						arrayStride: 12, // sizeof(vec3<f32>)
 						attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }],
 					},
 				],
@@ -158,7 +159,7 @@ export class WebGPURenderer {
 					view: textureView,
 					loadOp: "clear",
 					storeOp: "store",
-					clearValue: { r: scene.background.r, g: scene.background.g, b: scene.background.b, a: 1.0 },
+                    clearValue: { r: scene.background.r, g: scene.background.g, b: scene.background.b, a: 1.0 },
 				},
 			],
 		}
@@ -166,16 +167,19 @@ export class WebGPURenderer {
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 		passEncoder.setPipeline(this.renderPipeline)
 
+		// Обновляем глобальную матрицу вида-проекции
 		const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
 		this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
 		passEncoder.setBindGroup(0, this.globalUniformBindGroup)
 
+		// Собираем плоский список объектов для отрисовки
 		const renderList: RenderItem[] = []
 		this.collectRenderables(scene, new Matrix4(), renderList)
 
 		for (let i = 0; i < renderList.length; i++) {
 			const item = renderList[i]
-			this.renderMesh(passEncoder, item.mesh, i)
+			// Передаем мировую матрицу в метод отрисовки меша
+			this.renderMesh(passEncoder, item.mesh, item.worldMatrix, i)
 		}
 
 		passEncoder.end()
@@ -185,13 +189,16 @@ export class WebGPURenderer {
 	private collectRenderables(object: Object3D, parentWorldMatrix: Matrix4, renderList: RenderItem[]): void {
 		if (!object.visible) return
 
-		object.updateMatrix()
+		// object.updateMatrix() // ЭТА СТРОКА БЫЛА ОШИБКОЙ - она перезатирала матрицу из glTF
+		// Вычисляем мировую матрицу объекта
 		const worldMatrix = new Matrix4().multiplyMatrices(parentWorldMatrix, object.modelMatrix)
 
 		if (object instanceof Mesh) {
+			// Добавляем меш и его мировую матрицу в список
 			renderList.push({ mesh: object, worldMatrix })
 		}
 
+		// Рекурсивно обходим дочерние объекты
 		for (const child of object.children) {
 			this.collectRenderables(child, worldMatrix, renderList)
 		}
@@ -203,7 +210,7 @@ export class WebGPURenderer {
 		}
 
 		const positionBuffer = this.device!.createBuffer({
-			size: (geometry.attributes.position.array.byteLength + 3) & ~3,
+			size: (geometry.attributes.position.array.byteLength + 3) & ~3, // Выравнивание до 4 байт
 			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 			mappedAtCreation: true,
 		})
@@ -214,7 +221,7 @@ export class WebGPURenderer {
 		if (geometry.index) {
 			const TypedArray = geometry.index.array.length > 65535 ? Uint32Array : Uint16Array
 			indexBuffer = this.device!.createBuffer({
-				size: (geometry.index.array.byteLength + 3) & ~3,
+				size: (geometry.index.array.byteLength + 3) & ~3, // Выравнивание до 4 байт
 				usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
 				mappedAtCreation: true,
 			})
@@ -227,7 +234,7 @@ export class WebGPURenderer {
 		return buffers
 	}
 
-	private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh, renderIndex: number): void {
+	private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh, worldMatrix: Matrix4, renderIndex: number): void {
 		if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
 
 		const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
@@ -236,8 +243,12 @@ export class WebGPURenderer {
 		const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
 
 		if (material instanceof MeshBasicMaterial) {
-			// Записываем только цвет в начало блока
-			this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, new Float32Array(material.color.toArray()))
+			// Создаем массив для данных объекта (матрица + цвет)
+			const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
+			objectData.set(worldMatrix.elements, 0)
+			objectData.set(material.color.toArray(), 16) // Записываем цвет после матрицы (16 * 4 = 64 байта)
+
+			this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
 		}
 
 		passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset])
@@ -257,33 +268,33 @@ export class WebGPURenderer {
 
 	private getShaderCode(): string {
 		return `
-		  struct GlobalUniforms {
-		    viewProjectionMatrix: mat4x4<f32>,
-		  }
-		  @binding(0) @group(0) var<uniform> globalUniforms: GlobalUniforms;
+      struct GlobalUniforms {
+        viewProjectionMatrix: mat4x4<f32>,
+      }
+      @binding(0) @group(0) var<uniform> globalUniforms: GlobalUniforms;
 
-		  // УПРОЩАЕМ: Только цвет
-		  struct PerObjectUniforms {
-			  color: vec4<f32>,
-		  }
-		  @binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
+      struct PerObjectUniforms {
+        modelMatrix: mat4x4<f32>,
+        color: vec4<f32>,
+      }
+      @binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
 
-		  struct VertexOutput {
-		    @builtin(position) position: vec4<f32>,
-		  }
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+      }
 
-		  @vertex
-		  fn vs_main(@location(0) position: vec4<f32>) -> VertexOutput {
-		    var out: VertexOutput;
-			// УПРОЩАЕМ: Убираем матрицу модели, чтобы изолировать проблему
-		    out.position = globalUniforms.viewProjectionMatrix * position;
-		    return out;
-		  }
+      @vertex
+      fn vs_main(@location(0) local_position: vec3<f32>) -> VertexOutput {
+        var out: VertexOutput;
+        // Применяем все три матрицы для корректного позиционирования
+        out.position = globalUniforms.viewProjectionMatrix * perObject.modelMatrix * vec4<f32>(local_position, 1.0);
+        return out;
+      }
 
-		  @fragment
-		  fn fs_main() -> @location(0) vec4<f32> {
-		    return perObject.color;
-		  }
-		`
+      @fragment
+      fn fs_main() -> @location(0) vec4<f32> {
+        return perObject.color;
+      }
+    `
 	}
 }

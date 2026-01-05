@@ -200,7 +200,11 @@ export class GLTFLoader {
 				const TypedArray = this.getTypedArray(componentType)
 				const itemSize = this.getItemSize(type)
 
-				const array = new TypedArray(buffer, (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0), count * itemSize)
+				const array = new TypedArray(
+					buffer,
+					(bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
+					count * itemSize
+				)
 				geometry.setAttribute("position", new BufferAttribute(array, itemSize))
 			}
 		}
@@ -213,7 +217,11 @@ export class GLTFLoader {
 			const count = accessor.count
 
 			const TypedArray = this.getTypedArray(componentType)
-			const array = new TypedArray(buffer, (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0), count)
+			const array = new TypedArray(
+				buffer,
+				(bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
+				count
+			)
 			geometry.setIndex(new BufferAttribute(array, 1))
 		}
 		return geometry
