@@ -212,8 +212,9 @@ export class ViewPoint {
 		const rotationSpeed = 0.005
 		const offset = new Vector3().subVectors(this.position, this.target)
 
-		// Вращение по горизонтали (вокруг оси Y мира)
-		const quatX = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -deltaX * rotationSpeed)
+		// Вращение по горизонтали (вокруг оси Y мира) с коррекцией инверсии
+		const horizontalAngle = this.up.y < 0 ? deltaX * rotationSpeed : -deltaX * rotationSpeed
+		const quatX = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), horizontalAngle)
 		offset.applyQuaternion(quatX)
 		this.up.applyQuaternion(quatX)
 
