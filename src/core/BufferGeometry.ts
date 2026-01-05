@@ -1,47 +1,68 @@
-import { BufferAttribute } from "./BufferAttribute"
+/**
+ * Типы TypedArray, которые можно использовать в BufferAttribute.
+ */
+type TypedArray = Float32Array | Uint32Array | Uint16Array | Uint8Array | Int32Array | Int16Array | Int8Array
 
 /**
- * Описание геометрии на основе вершин.
- * @see https://threejs.org/docs/#api/en/core/BufferGeometry
+ * Хранит данные для одного атрибута геометрии (например, позиции вершин, нормали, цвета и т.д.).
+ */
+export class BufferAttribute {
+	/**
+	 * Массив с данными атрибута.
+	 */
+	public array: TypedArray
+	/**
+	 * Размер компонента атрибута (например, 3 для векторов vec3).
+	 */
+	public itemSize: number
+	/**
+	 * Количество элементов в массиве.
+	 */
+	public count: number
+
+	/**
+	 * Создает экземпляр BufferAttribute.
+	 * @param array - Массив с данными.
+	 * @param itemSize - Размер одного элемента.
+	 */
+	constructor(array: TypedArray, itemSize: number) {
+		this.array = array
+		this.itemSize = itemSize
+		this.count = array.length / itemSize
+	}
+}
+
+/**
+ * Представляет геометрию объекта. Содержит информацию о вершинах, индексах и других атрибутах.
  */
 export class BufferGeometry {
-    /**
-	 * Указывает, что данный объект является BufferGeometry.
+	/**
+	 * Атрибуты геометрии, хранящиеся в виде пар "имя-атрибут".
 	 */
-    public readonly isBufferGeometry: true = true
+	public attributes: { [name: string]: BufferAttribute } = {}
+	/**
+	 * Индексный буфер для геометрии.
+	 */
+	public index: BufferAttribute | null = null
 
 	/**
-	 * Атрибуты геометрии (позиции, нормали, цвета и т.д.).
+	 * Устанавливает атрибут для геометрии.
+	 * @param name - Имя атрибута (например, "position").
+	 * @param attribute - Объект BufferAttribute.
+	 * @returns {this}
 	 */
-    public attributes: { [name: string]: BufferAttribute } = {}
+	public setAttribute(name: string, attribute: BufferAttribute): this {
+		this.attributes[name] = attribute
+		return this
+	}
 
 	/**
-	 * Индексный буфер для вершин.
+	 * Устанавливает индексный буфер для геометрии.
+	 * @param index - Объект BufferAttribute с индексами.
+	 * @returns {this}
 	 */
-    public index: BufferAttribute | null = null
-
-	/**
-	 * Устанавливает индексный буфер.
-	 * @param index Массив индексов или BufferAttribute.
-	 * @returns Текущий экземпляр BufferGeometry.
-	 */
-    public setIndex(index: number[] | BufferAttribute): this {
-        if (Array.isArray(index)) {
-            this.index = new BufferAttribute(new Uint16Array(index), 1)
-        } else {
-            this.index = index
-        }
-        return this
-    }
-
-	/**
-	 * Устанавливает атрибут геометрии.
-	 * @param name Имя атрибута (например, 'position', 'normal', 'color').
-	 * @param attribute BufferAttribute.
-	 * @returns Текущий экземпляр BufferGeometry.
-	 */
-    public setAttribute(name: string, attribute: BufferAttribute): this {
-        this.attributes[name] = attribute
-        return this
-    }
+	public setIndex(index: BufferAttribute): this {
+		this.index = index
+		return this
+	}
 }

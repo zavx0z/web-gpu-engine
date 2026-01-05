@@ -1,85 +1,75 @@
-import { mat4, quat, vec3 } from "gl-matrix"
+import { Matrix4 } from "../math/Matrix4"
+import { Quaternion } from "../math/Quaternion"
+import { Vector3 } from "../math/Vector3"
 
 /**
- * Параметры для создания Object3D.
- */
-export interface Object3DParameters {
-	/**
-	 * Имя объекта. Необязательно.
-	 * @default ''
-	 */
-	name?: string
-}
-
-/**
- * Базовый класс для большинства объектов в сцене.
- * @see https://threejs.org/docs/#api/en/core/Object3D
+ * Базовый класс для всех объектов в сцене.
+ * Обеспечивает иерархическую структуру (граф сцены).
  */
 export class Object3D {
-	public readonly isObject3D: true = true
-
 	/**
-	 * Имя объекта.
+	 * Позиция объекта в виде вектора {x, y, z}.
+	 * @default new Vector3(0, 0, 0)
 	 */
-	public name: string
+	public position: Vector3 = new Vector3()
 
 	/**
-	 * Локальная матрица трансформации.
+	 * Кватернион, определяющий вращение объекта.
+	 * @default new Quaternion()
 	 */
-	public modelMatrix: mat4 = mat4.create()
+	public quaternion: Quaternion = new Quaternion()
+
+	// Внутреннее свойство для хранения вращения в углах Эйлера.
+	private _rotation: Vector3 = new Vector3()
 
 	/**
-	 * Позиция объекта.
+	 * Вращение объекта в радианах в виде углов Эйлера {x, y, z}.
+	 * При изменении этого свойства автоматически обновляется `quaternion`.
 	 */
-	public position: vec3 = vec3.create()
+	get rotation(): Vector3 {
+		return this._rotation
+	}
+	set rotation(value: Vector3) {
+		this._rotation = value
+		this.quaternion.setFromEuler(value.x, value.y, value.z)
+	}
 
 	/**
-	 * Кватернион, отвечающий за поворот.
+	 * Масштаб объекта в виде вектора {x, y, z}.
+	 * @default new Vector3(1, 1, 1)
 	 */
-	public quaternion: quat = quat.create()
+	public scale: Vector3 = new Vector3(1, 1, 1)
 
 	/**
-	 * Масштаб объекта.
+	 * Локальная матрица преобразования объекта.
+	 * @default new Matrix4()
 	 */
-	public scale: vec3 = vec3.fromValues(1, 1, 1)
+	public modelMatrix: Matrix4 = new Matrix4()
 
 	/**
-	 * Список дочерних объектов.
+	 * Массив дочерних объектов.
 	 */
 	public children: Object3D[] = []
-
-	/**
-	 * Строка, идентифицирующая тип объекта.
-	 */
-	public type = "Object3D"
 
 	/**
 	 * Видимость объекта. Если false, объект не будет отрисован.
 	 * @default true
 	 */
-	public visible = true
+	public visible: boolean = true
 
-	constructor(parameters: Object3DParameters = {}) {
-		this.name = parameters.name ?? ""
+	/**
+	 * Добавляет дочерний объект к этому объекту.
+	 * @param {Object3D} child - Дочерний объект.
+	 */
+	public add(child: Object3D): void {
+		this.children.push(child)
 	}
 
 	/**
-	 * Добавляет объект как дочерний к этому объекту.
-	 * @param object Объект для добавления.
+	 * Обновляет локальную матрицу преобразования объекта
+	 * на основе его позиции, кватерниона и масштаба.
 	 */
-	public add(object: Object3D) {
-		this.children.push(object)
-	}
-
-	/**
-	 * Обновляет матрицу модели из позиции, кватерниона и масштаба.
-	 */
-	public updateMatrix() {
-		mat4.fromRotationTranslationScale(
-			this.modelMatrix,
-			this.quaternion,
-			this.position,
-			this.scale
-		)
+	public updateMatrix(): void {
+		this.modelMatrix.compose(this.position, this.quaternion, this.scale)
 	}
 }
