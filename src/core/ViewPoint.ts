@@ -38,10 +38,12 @@ export class ViewPoint {
 	private alpha: number // Горизонтальный угол (азимут)
 	private beta: number  // Вертикальный угол (полярный)
 
+	// Состояние ввода
 	private isRotating = false
 	private isPanning = false
 	private lastX = 0
 	private lastY = 0
+	private lastTouchDistance: number | null = null
 
 	constructor(parameters: ViewPointParameters) {
 		this.element = parameters.element
@@ -100,6 +102,10 @@ export class ViewPoint {
 		document.removeEventListener("mouseup", this.onMouseUp)
 		this.element.removeEventListener("wheel", this.onWheel)
 		this.element.removeEventListener("contextmenu", this.preventContextMenu)
+		this.element.removeEventListener("touchstart", this.onTouchStart)
+		this.element.removeEventListener("touchend", this.onTouchEnd)
+		this.element.removeEventListener("touchcancel", this.onTouchEnd)
+		this.element.removeEventListener("touchmove", this.onTouchMove)
 	}
 
 	private attachEventListeners() {
@@ -109,6 +115,11 @@ export class ViewPoint {
 		document.addEventListener("mouseup", this.onMouseUp)
 		this.element.addEventListener("wheel", this.onWheel, { passive: false })
 		this.element.addEventListener("contextmenu", this.preventContextMenu)
+
+		this.element.addEventListener("touchstart", this.onTouchStart, { passive: false })
+		this.element.addEventListener("touchend", this.onTouchEnd)
+		this.element.addEventListener("touchcancel", this.onTouchEnd)
+		this.element.addEventListener("touchmove", this.onTouchMove, { passive: false })
 	}
 
 	private preventContextMenu = (e: Event) => e.preventDefault()
@@ -140,10 +151,79 @@ export class ViewPoint {
 		this.isPanning = false
 	}
 
+	private onTouchStart = (event: TouchEvent) => {
+		event.preventDefault()
+		const touches = event.touches
+
+		switch (touches.length) {
+			case 1:
+				this.isRotating = true
+				this.lastX = touches[0].clientX
+				this.lastY = touches[0].clientY
+				break
+			case 2:
+				this.isPanning = true
+				const dx = touches[0].clientX - touches[1].clientX
+				const dy = touches[0].clientY - touches[1].clientY
+				this.lastTouchDistance = Math.sqrt(dx * dx + dy * dy)
+				this.lastX = (touches[0].clientX + touches[1].clientX) / 2
+				this.lastY = (touches[0].clientY + touches[1].clientY) / 2
+				break
+			default:
+				this.isRotating = false
+				this.isPanning = false
+		}
+	}
+
+	private onTouchMove = (event: TouchEvent) => {
+		event.preventDefault()
+		const touches = event.touches
+
+		if (touches.length === 1 && this.isRotating) {
+			const deltaX = touches[0].clientX - this.lastX
+			const deltaY = touches[0].clientY - this.lastY
+			this.handleRotation(deltaX, deltaY)
+			this.lastX = touches[0].clientX
+			this.lastY = touches[0].clientY
+			this.update()
+		} else if (touches.length === 2 && this.isPanning) {
+			// Щипок (Pinch-to-Zoom)
+			const dx = touches[0].clientX - touches[1].clientX
+			const dy = touches[0].clientY - touches[1].clientY
+			const currentTouchDistance = Math.sqrt(dx * dx + dy * dy)
+			if (this.lastTouchDistance !== null) {
+				const deltaDistance = currentTouchDistance - this.lastTouchDistance
+				this.handleZoom(deltaDistance)
+			}
+			this.lastTouchDistance = currentTouchDistance
+
+			// Панорамирование
+			const currentMidX = (touches[0].clientX + touches[1].clientX) / 2
+			const currentMidY = (touches[0].clientY + touches[1].clientY) / 2
+			const deltaX = currentMidX - this.lastX
+			const deltaY = currentMidY - this.lastY
+			this.handlePan(deltaX, deltaY)
+			this.lastX = currentMidX
+			this.lastY = currentMidY
+
+			this.update()
+		}
+	}
+
+	private onTouchEnd = (event: TouchEvent) => {
+		if (event.touches.length < 2) {
+			this.isPanning = false
+			this.lastTouchDistance = null
+		}
+		if (event.touches.length < 1) {
+			this.isRotating = false
+		}
+	}
+
 	private onWheel = (event: WheelEvent) => {
 		event.preventDefault()
 		if (event.ctrlKey) {
-			this.handleZoom(event.deltaY)
+			this.handleZoom(-event.deltaY)
 		} else {
 			this.handlePan(event.deltaX, event.deltaY)
 		}
@@ -158,31 +238,30 @@ export class ViewPoint {
 		this.alpha -= deltaX * rotationSpeed
 		this.beta -= deltaY * rotationSpeed
 
-		// Ограничиваем угол beta, чтобы избежать "переворота" камеры через полюса.
 		this.beta = Math.max(EPSILON, Math.min(Math.PI - EPSILON, this.beta))
 	}
 
 	/**
-	 * Панорамирует камеру, сдвигая цель (target) в плоскости, перпендикулярной взгляду.
+	 * Панорамирует камеру, сдвигая цель (target).
 	 */
 	private handlePan(deltaX: number, deltaY: number) {
 		const panSpeed = 0.001 * this.radius
-		
-		// Извлекаем векторы "вправо" и "вверх" из матрицы вида.
+
 		const right = new Vector3(this.viewMatrix.elements[0], this.viewMatrix.elements[4], this.viewMatrix.elements[8])
 		const up = new Vector3(this.viewMatrix.elements[1], this.viewMatrix.elements[5], this.viewMatrix.elements[9])
 
-		const panOffset = right.multiplyScalar(-deltaX * panSpeed).add(up.multiplyScalar(deltaY * panSpeed))
+		const panOffset = right.multiplyScalar(deltaX * panSpeed).add(up.multiplyScalar(-deltaY * panSpeed))
 
 		this.target.add(panOffset)
 	}
 
 	/**
 	 * Масштабирует, изменяя радиус до цели.
+	 * Положительный `delta` приближает, отрицательный — отдаляет.
 	 */
-	private handleZoom(deltaY: number) {
-		const zoomSpeed = 0.1
-		this.radius += deltaY * zoomSpeed * 0.1
-		this.radius = Math.max(0.1, this.radius) // Не позволяем радиусу стать нулевым или отрицательным
+	private handleZoom(delta: number) {
+		const scale = Math.pow(0.95, delta * 0.05)
+		this.radius *= scale
+		this.radius = Math.max(0.1, this.radius)
 	}
 }
