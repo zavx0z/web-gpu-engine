@@ -11,22 +11,6 @@ import {
 	GridHelper,
 } from "../src/WebGPUEngine"
 
-// --- CSS для полноэкранного режима ---
-const style = document.createElement("style")
-style.textContent = `
-  body {
-    margin: 0;
-    overflow: hidden;
-  }
-  canvas {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-  }
-`
-document.head.appendChild(style)
-// --- Конец CSS ---
-
 document.addEventListener("DOMContentLoaded", async () => {
 	const renderer = new WebGPURenderer()
 	await renderer.init()
@@ -48,7 +32,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		fov: (2 * Math.PI) / 5,
 		position: { x: 0, y: 800, z: 1000 },
 		near: 0.1,
-		far: 2000,
+		far: 10000,
 	})
 
 	const grid = new GridHelper(1000, 20)
