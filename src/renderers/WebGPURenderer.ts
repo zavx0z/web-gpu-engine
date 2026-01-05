@@ -1,9 +1,16 @@
-import { mat4 } from "gl-matrix"
 import { Scene } from "../scenes/Scene"
 import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
 import { Object3D } from "../core/Object3D"
 import { BufferGeometry } from "../core/BufferGeometry"
+import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
+import { Matrix4 } from "../math/Matrix4"
+
+// --- Константы для динамических uniform-буферов ---
+const UNIFORM_ALIGNMENT = 256
+const MAX_RENDERABLES = 1000
+// УПРОЩАЕМ: Размер данных только для цвета (vec4<f32>).
+const PER_OBJECT_DATA_SIZE = Math.ceil(16 / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT // Будет 256
 
 interface GeometryBuffers {
 	positionBuffer: GPUBuffer
@@ -12,30 +19,25 @@ interface GeometryBuffers {
 
 interface RenderItem {
 	mesh: Mesh
-	worldMatrix: mat4
+	worldMatrix: Matrix4
 }
 
-/**
- * Отрисовщик, использующий технологию WebGPU для рендеринга 3D-сцен.
- */
 export class WebGPURenderer {
 	private device: GPUDevice | null = null
 	private context: GPUCanvasContext | null = null
 	private presentationFormat: GPUTextureFormat | null = null
 	private renderPipeline: GPURenderPipeline | null = null
-	private uniformBuffer: GPUBuffer | null = null
-	private uniformBindGroup: GPUBindGroup | null = null
+
+	private globalUniformBuffer: GPUBuffer | null = null
+	private globalUniformBindGroup: GPUBindGroup | null = null
+
+	private perObjectUniformBuffer: GPUBuffer | null = null
+	private perObjectBindGroup: GPUBindGroup | null = null
+
 	private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
 
-	/**
-	 * HTML-элемент canvas, на котором происходит отрисовка.
-	 */
 	public canvas: HTMLCanvasElement | null = null
 
-	/**
-	 * Инициализирует WebGPU, настраивает устройство и контекст.
-	 * @returns Promise, который разрешается после успешной инициализации.
-	 */
 	public async init(): Promise<void> {
 		if (!navigator.gpu) {
 			throw new Error("WebGPU не поддерживается в этом браузере.")
@@ -60,71 +62,68 @@ export class WebGPURenderer {
 			format: this.presentationFormat,
 		})
 
-		this.setupRenderPipeline()
+		await this.setupRenderPipeline()
 	}
 
-	private setupRenderPipeline(): void {
+	private async setupRenderPipeline(): Promise<void> {
 		if (!this.device || !this.presentationFormat) return
 
-		this.uniformBuffer = this.device.createBuffer({
-			size: 64 * 2, // 2 матрицы 4x4 (view-projection и model)
+		this.globalUniformBuffer = this.device.createBuffer({
+			size: 64,
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 		})
 
-		const bindGroupLayout = this.device.createBindGroupLayout({
+		const globalBindGroupLayout = this.device.createBindGroupLayout({
+			entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } }],
+		})
+
+		this.globalUniformBindGroup = this.device.createBindGroup({
+			layout: globalBindGroupLayout,
+			entries: [{ binding: 0, resource: { buffer: this.globalUniformBuffer } }],
+		})
+
+		this.perObjectUniformBuffer = this.device.createBuffer({
+			size: MAX_RENDERABLES * PER_OBJECT_DATA_SIZE,
+			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+		})
+
+		const perObjectBindGroupLayout = this.device.createBindGroupLayout({
 			entries: [
 				{
 					binding: 0,
-					visibility: GPUShaderStage.VERTEX,
-					buffer: { type: "uniform" },
+					visibility: GPUShaderStage.FRAGMENT, // Цвет нужен только во фрагментном шейдере
+					buffer: { type: "uniform", hasDynamicOffset: true },
 				},
 			],
 		})
 
-		this.uniformBindGroup = this.device.createBindGroup({
-			layout: bindGroupLayout,
-			entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }],
+		this.perObjectBindGroup = this.device.createBindGroup({
+			layout: perObjectBindGroupLayout,
+			entries: [
+				{
+					binding: 0,
+					resource: {
+						buffer: this.perObjectUniformBuffer,
+						size: PER_OBJECT_DATA_SIZE,
+					},
+				},
+			],
 		})
 
 		const pipelineLayout = this.device.createPipelineLayout({
-			bindGroupLayouts: [bindGroupLayout],
+			bindGroupLayouts: [globalBindGroupLayout, perObjectBindGroupLayout],
 		})
 
-		const shaderModule = this.device.createShaderModule({
-			code: `
-        struct Uniforms {
-          viewProjectionMatrix: mat4x4<f32>,
-          modelMatrix: mat4x4<f32>,
-        }
+		const shaderModule = this.device.createShaderModule({ code: this.getShaderCode() })
 
-        @binding(0) @group(0) var<uniform> uniforms: Uniforms;
-
-        struct VertexOutput {
-          @builtin(position) position: vec4<f32>,
-        }
-
-        @vertex
-        fn vs_main(@location(0) position: vec4<f32>) -> VertexOutput {
-          var out: VertexOutput;
-          out.position = uniforms.viewProjectionMatrix * uniforms.modelMatrix * position;
-          return out;
-        }
-
-        @fragment
-        fn fs_main() -> @location(0) vec4<f32> {
-          return vec4<f32>(1.0, 1.0, 1.0, 1.0); // Возвращаем белый цвет
-        }
-      `,
-		})
-
-		this.renderPipeline = this.device.createRenderPipeline({
+		this.renderPipeline = await this.device.createRenderPipelineAsync({
 			layout: pipelineLayout,
 			vertex: {
 				module: shaderModule,
 				entryPoint: "vs_main",
 				buffers: [
 					{
-						arrayStride: 12, // 3 * 4 байта (vec3<f32>)
+						arrayStride: 12,
 						attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }],
 					},
 				],
@@ -148,7 +147,7 @@ export class WebGPURenderer {
 	}
 
 	public render(scene: Scene, viewPoint: ViewPoint): void {
-		if (!this.device || !this.context || !this.renderPipeline || !this.uniformBuffer) return
+		if (!this.device || !this.context || !this.renderPipeline || !this.globalUniformBuffer || !this.globalUniformBindGroup) return
 
 		const commandEncoder = this.device.createCommandEncoder()
 		const textureView = this.context.getCurrentTexture().createView()
@@ -159,7 +158,7 @@ export class WebGPURenderer {
 					view: textureView,
 					loadOp: "clear",
 					storeOp: "store",
-					clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+					clearValue: { r: scene.background.r, g: scene.background.g, b: scene.background.b, a: 1.0 },
 				},
 			],
 		}
@@ -167,26 +166,27 @@ export class WebGPURenderer {
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 		passEncoder.setPipeline(this.renderPipeline)
 
-		const vpMatrix = mat4.create()
-		mat4.multiply(vpMatrix, viewPoint.projectionMatrix, viewPoint.viewMatrix)
-		this.device.queue.writeBuffer(this.uniformBuffer, 0, vpMatrix as unknown as ArrayBuffer)
+		const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
+		this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
+		passEncoder.setBindGroup(0, this.globalUniformBindGroup)
 
 		const renderList: RenderItem[] = []
-		this.collectRenderables(scene, mat4.create(), renderList)
+		this.collectRenderables(scene, new Matrix4(), renderList)
 
-		for (const item of renderList) {
-			this.renderMesh(passEncoder, item.mesh, item.worldMatrix)
+		for (let i = 0; i < renderList.length; i++) {
+			const item = renderList[i]
+			this.renderMesh(passEncoder, item.mesh, i)
 		}
 
 		passEncoder.end()
 		this.device.queue.submit([commandEncoder.finish()])
 	}
 
-	private collectRenderables(object: Object3D, parentWorldMatrix: mat4, renderList: RenderItem[]): void {
+	private collectRenderables(object: Object3D, parentWorldMatrix: Matrix4, renderList: RenderItem[]): void {
 		if (!object.visible) return
 
-		const worldMatrix = mat4.create()
-		mat4.multiply(worldMatrix, parentWorldMatrix, object.modelMatrix)
+		object.updateMatrix()
+		const worldMatrix = new Matrix4().multiplyMatrices(parentWorldMatrix, object.modelMatrix)
 
 		if (object instanceof Mesh) {
 			renderList.push({ mesh: object, worldMatrix })
@@ -203,18 +203,23 @@ export class WebGPURenderer {
 		}
 
 		const positionBuffer = this.device!.createBuffer({
-			size: geometry.attributes.position.array.byteLength,
+			size: (geometry.attributes.position.array.byteLength + 3) & ~3,
 			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+			mappedAtCreation: true,
 		})
-		this.device!.queue.writeBuffer(positionBuffer, 0, geometry.attributes.position.array)
+		new Float32Array(positionBuffer.getMappedRange()).set(geometry.attributes.position.array)
+		positionBuffer.unmap()
 
 		let indexBuffer: GPUBuffer | undefined
 		if (geometry.index) {
+			const TypedArray = geometry.index.array.length > 65535 ? Uint32Array : Uint16Array
 			indexBuffer = this.device!.createBuffer({
-				size: geometry.index.array.byteLength,
+				size: (geometry.index.array.byteLength + 3) & ~3,
 				usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+				mappedAtCreation: true,
 			})
-			this.device!.queue.writeBuffer(indexBuffer, 0, geometry.index.array)
+			new TypedArray(indexBuffer.getMappedRange()).set(geometry.index.array)
+			indexBuffer.unmap()
 		}
 
 		const buffers: GeometryBuffers = { positionBuffer, indexBuffer }
@@ -222,22 +227,63 @@ export class WebGPURenderer {
 		return buffers
 	}
 
-	private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh, worldMatrix: mat4): void {
-		if (!this.device || !this.uniformBindGroup || !this.uniformBuffer) return
+	private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh, renderIndex: number): void {
+		if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
 
-		this.device.queue.writeBuffer(this.uniformBuffer, 64, worldMatrix as unknown as ArrayBuffer)
-		passEncoder.setBindGroup(0, this.uniformBindGroup)
+		const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+		if (!material.visible) return
+
+		const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
+
+		if (material instanceof MeshBasicMaterial) {
+			// Записываем только цвет в начало блока
+			this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, new Float32Array(material.color.toArray()))
+		}
+
+		passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset])
 
 		const { positionBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
 
 		passEncoder.setVertexBuffer(0, positionBuffer)
 
 		if (indexBuffer) {
-			const indexFormat = mesh.geometry.index!.array instanceof Uint16Array ? "uint16" : "uint32"
+			const indexFormat = mesh.geometry.index!.array.length > 65535 ? "uint32" : "uint16"
 			passEncoder.setIndexBuffer(indexBuffer, indexFormat)
 			passEncoder.drawIndexed(mesh.geometry.index!.count)
 		} else {
 			passEncoder.draw(mesh.geometry.attributes.position.count)
 		}
+	}
+
+	private getShaderCode(): string {
+		return `
+		  struct GlobalUniforms {
+		    viewProjectionMatrix: mat4x4<f32>,
+		  }
+		  @binding(0) @group(0) var<uniform> globalUniforms: GlobalUniforms;
+
+		  // УПРОЩАЕМ: Только цвет
+		  struct PerObjectUniforms {
+			  color: vec4<f32>,
+		  }
+		  @binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
+
+		  struct VertexOutput {
+		    @builtin(position) position: vec4<f32>,
+		  }
+
+		  @vertex
+		  fn vs_main(@location(0) position: vec4<f32>) -> VertexOutput {
+		    var out: VertexOutput;
+			// УПРОЩАЕМ: Убираем матрицу модели, чтобы изолировать проблему
+		    out.position = globalUniforms.viewProjectionMatrix * position;
+		    return out;
+		  }
+
+		  @fragment
+		  fn fs_main() -> @location(0) vec4<f32> {
+		    return perObject.color;
+		  }
+		`
 	}
 }
