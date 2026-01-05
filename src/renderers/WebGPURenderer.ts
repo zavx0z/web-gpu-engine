@@ -1,4 +1,3 @@
-
 import { Scene } from "../scenes/Scene"
 import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
@@ -37,6 +36,8 @@ export class WebGPURenderer {
 
 	private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
 	private depthTexture: GPUTexture | null = null
+	private multisampleTexture: GPUTexture | null = null
+	private sampleCount = 4 // Уровень сглаживания (MSAA)
 
 	public canvas: HTMLCanvasElement | null = null
 
@@ -143,6 +144,9 @@ export class WebGPURenderer {
 				depthCompare: "less",
 				format: "depth24plus",
 			},
+			multisample: {
+				count: this.sampleCount,
+			},
 		})
 	}
 
@@ -156,15 +160,26 @@ export class WebGPURenderer {
 	public render(scene: Scene, viewPoint: ViewPoint): void {
 		if (!this.device || !this.context || !this.renderPipeline || !this.globalUniformBuffer || !this.globalUniformBindGroup || !this.canvas) return
 
-		// --- Управление текстурой глубины ---
-		if (!this.depthTexture || this.depthTexture.width !== this.canvas.width || this.depthTexture.height !== this.canvas.height) {
-			if (this.depthTexture) {
-				this.depthTexture.destroy()
-			}
+		// --- Управление текстурами для рендеринга (глубина и мультисэмплинг) ---
+		const needsResize = !this.depthTexture || this.depthTexture.width !== this.canvas.width || this.depthTexture.height !== this.canvas.height
+		if (needsResize) {
+			if (this.depthTexture) this.depthTexture.destroy()
+			if (this.multisampleTexture) this.multisampleTexture.destroy()
+
+			const size = { width: this.canvas.width, height: this.canvas.height }
+
 			this.depthTexture = this.device.createTexture({
-				size: [this.canvas.width, this.canvas.height],
+				size,
 				format: "depth24plus",
 				usage: GPUTextureUsage.RENDER_ATTACHMENT,
+				sampleCount: this.sampleCount,
+			})
+
+			this.multisampleTexture = this.device.createTexture({
+				size,
+				format: this.presentationFormat!,
+				usage: GPUTextureUsage.RENDER_ATTACHMENT,
+				sampleCount: this.sampleCount,
 			})
 		}
 
@@ -174,14 +189,15 @@ export class WebGPURenderer {
 		const renderPassDescriptor: GPURenderPassDescriptor = {
 			colorAttachments: [
 				{
-					view: textureView,
+					view: this.multisampleTexture!.createView(),
+					resolveTarget: textureView,
 					loadOp: "clear",
 					storeOp: "store",
 					clearValue: { r: scene.background.r, g: scene.background.g, b: scene.background.b, a: 1.0 },
 				},
 			],
 			depthStencilAttachment: {
-				view: this.depthTexture.createView(),
+				view: this.depthTexture!.createView(),
 				depthClearValue: 1.0,
 				depthLoadOp: "clear",
 				depthStoreOp: "store",
