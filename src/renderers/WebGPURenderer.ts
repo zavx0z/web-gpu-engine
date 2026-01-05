@@ -1,3 +1,4 @@
+
 import { Scene } from "../scenes/Scene"
 import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
@@ -35,6 +36,7 @@ export class WebGPURenderer {
 	private perObjectBindGroup: GPUBindGroup | null = null
 
 	private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
+	private depthTexture: GPUTexture | null = null
 
 	public canvas: HTMLCanvasElement | null = null
 
@@ -91,7 +93,6 @@ export class WebGPURenderer {
 			entries: [
 				{
 					binding: 0,
-					// Данные теперь используются в обоих шейдерах
 					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
 					buffer: { type: "uniform", hasDynamicOffset: true },
 				},
@@ -137,6 +138,11 @@ export class WebGPURenderer {
 			primitive: {
 				topology: "triangle-list",
 			},
+			depthStencil: {
+				depthWriteEnabled: true,
+				depthCompare: "less",
+				format: "depth24plus",
+			},
 		})
 	}
 
@@ -148,7 +154,19 @@ export class WebGPURenderer {
 	}
 
 	public render(scene: Scene, viewPoint: ViewPoint): void {
-		if (!this.device || !this.context || !this.renderPipeline || !this.globalUniformBuffer || !this.globalUniformBindGroup) return
+		if (!this.device || !this.context || !this.renderPipeline || !this.globalUniformBuffer || !this.globalUniformBindGroup || !this.canvas) return
+
+		// --- Управление текстурой глубины ---
+		if (!this.depthTexture || this.depthTexture.width !== this.canvas.width || this.depthTexture.height !== this.canvas.height) {
+			if (this.depthTexture) {
+				this.depthTexture.destroy()
+			}
+			this.depthTexture = this.device.createTexture({
+				size: [this.canvas.width, this.canvas.height],
+				format: "depth24plus",
+				usage: GPUTextureUsage.RENDER_ATTACHMENT,
+			})
+		}
 
 		const commandEncoder = this.device.createCommandEncoder()
 		const textureView = this.context.getCurrentTexture().createView()
@@ -159,26 +177,29 @@ export class WebGPURenderer {
 					view: textureView,
 					loadOp: "clear",
 					storeOp: "store",
-                    clearValue: { r: scene.background.r, g: scene.background.g, b: scene.background.b, a: 1.0 },
+					clearValue: { r: scene.background.r, g: scene.background.g, b: scene.background.b, a: 1.0 },
 				},
 			],
+			depthStencilAttachment: {
+				view: this.depthTexture.createView(),
+				depthClearValue: 1.0,
+				depthLoadOp: "clear",
+				depthStoreOp: "store",
+			},
 		}
 
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 		passEncoder.setPipeline(this.renderPipeline)
 
-		// Обновляем глобальную матрицу вида-проекции
 		const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
 		this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
 		passEncoder.setBindGroup(0, this.globalUniformBindGroup)
 
-		// Собираем плоский список объектов для отрисовки
 		const renderList: RenderItem[] = []
 		this.collectRenderables(scene, new Matrix4(), renderList)
 
 		for (let i = 0; i < renderList.length; i++) {
 			const item = renderList[i]
-			// Передаем мировую матрицу в метод отрисовки меша
 			this.renderMesh(passEncoder, item.mesh, item.worldMatrix, i)
 		}
 
@@ -189,16 +210,12 @@ export class WebGPURenderer {
 	private collectRenderables(object: Object3D, parentWorldMatrix: Matrix4, renderList: RenderItem[]): void {
 		if (!object.visible) return
 
-		// object.updateMatrix() // ЭТА СТРОКА БЫЛА ОШИБКОЙ - она перезатирала матрицу из glTF
-		// Вычисляем мировую матрицу объекта
 		const worldMatrix = new Matrix4().multiplyMatrices(parentWorldMatrix, object.modelMatrix)
 
 		if (object instanceof Mesh) {
-			// Добавляем меш и его мировую матрицу в список
 			renderList.push({ mesh: object, worldMatrix })
 		}
 
-		// Рекурсивно обходим дочерние объекты
 		for (const child of object.children) {
 			this.collectRenderables(child, worldMatrix, renderList)
 		}
@@ -210,7 +227,7 @@ export class WebGPURenderer {
 		}
 
 		const positionBuffer = this.device!.createBuffer({
-			size: (geometry.attributes.position.array.byteLength + 3) & ~3, // Выравнивание до 4 байт
+			size: (geometry.attributes.position.array.byteLength + 3) & ~3,
 			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 			mappedAtCreation: true,
 		})
@@ -221,7 +238,7 @@ export class WebGPURenderer {
 		if (geometry.index) {
 			const TypedArray = geometry.index.array.length > 65535 ? Uint32Array : Uint16Array
 			indexBuffer = this.device!.createBuffer({
-				size: (geometry.index.array.byteLength + 3) & ~3, // Выравнивание до 4 байт
+				size: (geometry.index.array.byteLength + 3) & ~3,
 				usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
 				mappedAtCreation: true,
 			})
@@ -243,10 +260,9 @@ export class WebGPURenderer {
 		const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
 
 		if (material instanceof MeshBasicMaterial) {
-			// Создаем массив для данных объекта (матрица + цвет)
 			const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
 			objectData.set(worldMatrix.elements, 0)
-			objectData.set(material.color.toArray(), 16) // Записываем цвет после матрицы (16 * 4 = 64 байта)
+			objectData.set(material.color.toArray(), 16)
 
 			this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
 		}
@@ -286,7 +302,6 @@ export class WebGPURenderer {
       @vertex
       fn vs_main(@location(0) local_position: vec3<f32>) -> VertexOutput {
         var out: VertexOutput;
-        // Применяем все три матрицы для корректного позиционирования
         out.position = globalUniforms.viewProjectionMatrix * perObject.modelMatrix * vec4<f32>(local_position, 1.0);
         return out;
       }
