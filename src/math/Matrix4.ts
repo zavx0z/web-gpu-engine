@@ -67,10 +67,26 @@ export class Matrix4 {
 	 */
 	public makeLookAt(eye: Vector3, target: Vector3, up: Vector3): this {
 		const z = new Vector3().subVectors(eye, target)
-		// Handedness doesn't matter here, as we are just looking for perpendicular vectors.
-		const x = new Vector3().crossVectors(up, z).normalize()
-		const y = new Vector3().crossVectors(z, x).normalize()
+
+		// Если eye == target, выбираем произвольное направление, чтобы избежать NaN.
+		if (z.length() === 0) {
+			z.z = 1
+		}
+
 		z.normalize()
+
+		// Handedness doesn't matter here, as we are just looking for perpendicular vectors.
+		let x = new Vector3().crossVectors(up, z)
+
+		// Если up почти параллелен направлению взгляда, базис становится вырожденным,
+		// что проявляется как дрожание около "полюсов". Подбираем запасной up.
+		if (x.length() < 1e-6) {
+			const fallbackUp = Math.abs(z.z) < 0.999 ? new Vector3(0, 0, 1) : new Vector3(1, 0, 0)
+			x = new Vector3().crossVectors(fallbackUp, z)
+		}
+
+		x.normalize()
+		const y = new Vector3().crossVectors(z, x).normalize()
 
 		const te = this.elements
 		// prettier-ignore
