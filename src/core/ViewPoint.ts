@@ -1,4 +1,5 @@
 import { Matrix4 } from "../math/Matrix4"
+import { Quaternion } from "../math/Quaternion"
 import { Vector3 } from "../math/Vector3"
 
 /**
@@ -13,12 +14,9 @@ export interface ViewPointParameters {
 	target?: { x: number; y: number; z: number }
 }
 
-const EPSILON = 1e-6
-
 /**
  * Представляет точку обзора (камеру и управление) в 3D-пространстве.
- * Реализует орбитальное управление на основе сферических координат,
- * строго следуя контракту RH_ZO (Right-Handed, Z в [0, 1]).
+ * Реализует орбитальное управление в стиле Blender (trackball) без блокировки полюсов.
  */
 export class ViewPoint {
 	public fov: number
@@ -26,17 +24,13 @@ export class ViewPoint {
 	public near: number
 	public far: number
 
-	public position: Vector3 = new Vector3()
+	public position: Vector3
 	public viewMatrix: Matrix4 = new Matrix4()
 	public projectionMatrix: Matrix4 = new Matrix4()
 
 	private element: HTMLElement
 	private target: Vector3
-
-	// Сферические координаты для орбитального вращения
-	private radius: number
-	private alpha: number // Горизонтальный угол (азимут)
-	private beta: number  // Вертикальный угол (полярный)
+	private up: Vector3 = new Vector3(0, 1, 0)
 
 	// Состояние ввода
 	private isRotating = false
@@ -58,13 +52,7 @@ export class ViewPoint {
 		this.aspect = this.element.clientWidth / this.element.clientHeight
 
 		this.target = parameters.target ? new Vector3(parameters.target.x, parameters.target.y, parameters.target.z) : new Vector3(0, 0, 0)
-		const initialPosition = parameters.position ? new Vector3(parameters.position.x, parameters.position.y, parameters.position.z) : new Vector3(0, 0, 10)
-
-		// Инициализация сферических координат из начальной позиции
-		const offset = new Vector3().subVectors(initialPosition, this.target)
-		this.radius = offset.length()
-		this.alpha = Math.atan2(offset.x, offset.z)
-		this.beta = Math.acos(offset.y / this.radius)
+		this.position = parameters.position ? new Vector3(parameters.position.x, parameters.position.y, parameters.position.z) : new Vector3(0, 0, 10)
 
 		this.updateProjectionMatrix()
 		this.attachEventListeners()
@@ -82,18 +70,10 @@ export class ViewPoint {
 	}
 
 	/**
-	 * Пересчитывает позицию камеры из сферических координат и обновляет матрицу вида.
+	 * Обновляет матрицу вида на основе текущего положения, цели и вектора 'up'.
 	 */
 	public update = () => {
-		const sinBeta = Math.sin(this.beta)
-		const offset = new Vector3(
-			this.radius * sinBeta * Math.sin(this.alpha),
-			this.radius * Math.cos(this.beta),
-			this.radius * sinBeta * Math.cos(this.alpha),
-		)
-
-		this.position.copy(this.target).add(offset)
-		this.viewMatrix.makeLookAt(this.position, this.target, new Vector3(0, 1, 0))
+		this.viewMatrix.makeLookAt(this.position, this.target, this.up)
 	}
 
 	public dispose() {
@@ -187,7 +167,6 @@ export class ViewPoint {
 			this.lastY = touches[0].clientY
 			this.update()
 		} else if (touches.length === 2 && this.isPanning) {
-			// Щипок (Pinch-to-Zoom)
 			const dx = touches[0].clientX - touches[1].clientX
 			const dy = touches[0].clientY - touches[1].clientY
 			const currentTouchDistance = Math.sqrt(dx * dx + dy * dy)
@@ -197,7 +176,6 @@ export class ViewPoint {
 			}
 			this.lastTouchDistance = currentTouchDistance
 
-			// Панорамирование
 			const currentMidX = (touches[0].clientX + touches[1].clientX) / 2
 			const currentMidY = (touches[0].clientY + touches[1].clientY) / 2
 			const deltaX = currentMidX - this.lastX
@@ -230,38 +208,46 @@ export class ViewPoint {
 		this.update()
 	}
 
-	/**
-	 * Вращает камеру, изменяя сферические координаты.
-	 */
 	private handleRotation(deltaX: number, deltaY: number) {
 		const rotationSpeed = 0.005
-		this.alpha -= deltaX * rotationSpeed
-		this.beta -= deltaY * rotationSpeed
+		const offset = new Vector3().subVectors(this.position, this.target)
 
-		this.beta = Math.max(EPSILON, Math.min(Math.PI - EPSILON, this.beta))
+		// Вращение по горизонтали (вокруг оси Y мира)
+		const quatX = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -deltaX * rotationSpeed)
+		offset.applyQuaternion(quatX)
+		this.up.applyQuaternion(quatX)
+
+		// Вращение по вертикали (вокруг оси X камеры)
+		const right = new Vector3().crossVectors(this.up, offset).normalize()
+		const quatY = new Quaternion().setFromAxisAngle(right, -deltaY * rotationSpeed)
+		offset.applyQuaternion(quatY)
+		this.up.applyQuaternion(quatY)
+
+		// Обновляем позицию камеры
+		this.position.copy(this.target).add(offset)
 	}
 
-	/**
-	 * Панорамирует камеру, сдвигая цель (target).
-	 */
 	private handlePan(deltaX: number, deltaY: number) {
-		const panSpeed = 0.001 * this.radius
+		const offset = new Vector3().subVectors(this.position, this.target)
+		const panSpeed = 0.001 * offset.length()
 
-		const right = new Vector3(this.viewMatrix.elements[0], this.viewMatrix.elements[4], this.viewMatrix.elements[8])
-		const up = new Vector3(this.viewMatrix.elements[1], this.viewMatrix.elements[5], this.viewMatrix.elements[9])
+		const right = new Vector3().crossVectors(this.up, offset).normalize()
+		const panDelta = new Vector3()
+			.add(right.multiplyScalar(-deltaX * panSpeed))
+			.add(this.up.clone().multiplyScalar(deltaY * panSpeed))
 
-		const panOffset = right.multiplyScalar(deltaX * panSpeed).add(up.multiplyScalar(-deltaY * panSpeed))
-
-		this.target.add(panOffset)
+		// При панорамировании сдвигаем и позицию, и цель
+		this.position.add(panDelta)
+		this.target.add(panDelta)
 	}
 
-	/**
-	 * Масштабирует, изменяя радиус до цели.
-	 * Положительный `delta` приближает, отрицательный — отдаляет.
-	 */
 	private handleZoom(delta: number) {
+		const offset = new Vector3().subVectors(this.position, this.target)
 		const scale = Math.pow(0.95, delta * 0.05)
-		this.radius *= scale
-		this.radius = Math.max(0.1, this.radius)
+		const newRadius = Math.max(0.1, offset.length() * scale)
+
+		offset.normalize().multiplyScalar(newRadius)
+
+		this.position.copy(this.target).add(offset)
 	}
 }
