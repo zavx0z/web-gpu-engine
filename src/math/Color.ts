@@ -1,73 +1,47 @@
-export type ColorSource = Color | number | string
-
 /**
- * Класс для работы с цветами.
- * @see https://threejs.org/docs/#api/en/math/Color
+ * Класс для представления цвета в формате RGB.
  */
 export class Color {
 	/**
 	 * Красный компонент цвета.
-	 * @default 1
+	 * @default 1.0
+	 * @min 0
+	 * @max 1
 	 */
-	public r: number = 1
+	public r: number = 1.0
 	/**
 	 * Зеленый компонент цвета.
-	 * @default 1
+	 * @default 1.0
+	 * @min 0
+	 * @max 1
 	 */
-	public g: number = 1
+	public g: number = 1.0
 	/**
 	 * Синий компонент цвета.
-	 * @default 1
+	 * @default 1.0
+	 * @min 0
+	 * @max 1
 	 */
-	public b: number = 1
+	public b: number = 1.0
 
 	/**
-	 * @param r Значение красного компонента, или шестнадцатеричное значение, или строка.
-	 * @param g Значение зеленого компонента.
-	 * @param b Значение синего компонента.
+	 * Создает экземпляр Color.
+	 * @param r - Значение красного (0-1), или шестнадцатеричное значение цвета.
+	 * @param g - Значение зеленого (0-1).
+	 * @param b - Значение синего (0-1).
 	 */
-	constructor(r?: ColorSource, g?: number, b?: number) {
+	constructor(r?: number, g?: number, b?: number) {
 		if (g === undefined && b === undefined) {
-			this.set(r ?? 0xffffff)
+			this.setHex(r ?? 0xffffff)
 		} else {
-			this.setRGB(r as number, g as number, b as number)
+			this.setRGB(r as number, g!, b!)
 		}
 	}
 
 	/**
-	 * Устанавливает значения RGB.
-	 * @param r Значение красного компонента.
-	 * @param g Значение зеленого компонента.
-	 * @param b Значение синего компонента.
-	 * @returns Текущий экземпляр Color.
-	 */
-	public setRGB(r: number, g: number, b: number): this {
-		this.r = r
-		this.g = g
-		this.b = b
-		return this
-	}
-
-	/**
-	 * Устанавливает цвет из различных источников.
-	 * @param value Значение цвета.
-	 * @returns Текущий экземпляр Color.
-	 */
-	public set(value: ColorSource): this {
-		if (value instanceof Color) {
-			this.copy(value)
-		} else if (typeof value === "number") {
-			this.setHex(value)
-		} else if (typeof value === "string") {
-			this.setStyle(value)
-		}
-		return this
-	}
-
-	/**
-	 * Копирует значения из другого цвета.
-	 * @param color Цвет для копирования.
-	 * @returns Текущий экземпляр Color.
+	 * Копирует значения из другого объекта Color.
+	 * @param color - Объект Color, из которого копируются значения.
+	 * @returns {this}
 	 */
 	public copy(color: Color): this {
 		this.r = color.r
@@ -77,9 +51,31 @@ export class Color {
 	}
 
 	/**
+	 * Клонирует данный объект Color.
+	 * @returns {Color}
+	 */
+	public clone(): Color {
+		return new Color(this.r, this.g, this.b)
+	}
+
+	/**
+	 * Устанавливает цвет из RGB компонентов.
+	 * @param r - Красный компонент (0-1).
+	 * @param g - Зеленый компонент (0-1).
+	 * @param b - Синий компонент (0-1).
+	 * @returns {this}
+	 */
+	public setRGB(r: number, g: number, b: number): this {
+		this.r = r
+		this.g = g
+		this.b = b
+		return this
+	}
+
+	/**
 	 * Устанавливает цвет из шестнадцатеричного значения.
-	 * @param hex Шестнадцатеричное значение.
-	 * @returns Текущий экземпляр Color.
+	 * @param hex - Шестнадцатеричное значение цвета (например, 0xff0000 для красного).
+	 * @returns {this}
 	 */
 	public setHex(hex: number): this {
 		hex = Math.floor(hex)
@@ -90,12 +86,10 @@ export class Color {
 	}
 
 	/**
-	 * Устанавливает цвет из строки CSS-стиля.
-	 * @param style Строка CSS-стиля.
-	 * @returns Текущий экземпляр Color.
+	 * Возвращает массив [r, g, b, 1.0] (RGBA) в виде Float32Array.
+	 * @returns {Float32Array}
 	 */
-	public setStyle(style: string): this {
-		// TODO: Implement style parsing
-		return this
+	public toArray(): Float32Array {
+		return new Float32Array([this.r, this.g, this.b, 1.0])
 	}
 }
