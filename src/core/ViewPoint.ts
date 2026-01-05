@@ -225,7 +225,7 @@ export class ViewPoint {
 		const rotationSpeed = 0.005
 		// Инвертированное ощущение: вправо — вправо, вверх — вверх.
 		this.yaw += deltaX * rotationSpeed
-		this.pitch += deltaY * rotationSpeed
+		this.pitch -= deltaY * rotationSpeed
 
 		// Полностью свободная орбита вокруг объекта (как в Blender по умолчанию):
 		// без ограничений по вертикали, камера может обойти объект с любой стороны.
