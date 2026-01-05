@@ -186,7 +186,8 @@ export class ViewPoint {
 			const currentMidY = (touches[0].clientY + touches[1].clientY) / 2
 			const deltaX = currentMidX - this.lastX
 			const deltaY = currentMidY - this.lastY
-			this.handlePan(deltaX, deltaY)
+			// Для тачскринов инвертируем панорамирование, чтобы создать эффект "перетаскивания"
+			this.handlePan(-deltaX, -deltaY)
 			this.lastX = currentMidX
 			this.lastY = currentMidY
 
