@@ -1,5 +1,4 @@
-import { BufferGeometry } from "../core/BufferGeometry"
-import { Float32BufferAttribute } from "../core/BufferAttribute"
+import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
 
 /**
  * Параметры для создания геометрии тора.
@@ -79,7 +78,7 @@ export class TorusGeometry extends BufferGeometry {
 			}
 		}
 
-		this.setIndex(indices)
-		this.setAttribute("position", new Float32BufferAttribute(vertices, 3))
+		this.setIndex(new BufferAttribute(new Uint16Array(indices), 1))
+		this.setAttribute("position", new BufferAttribute(new Float32Array(vertices), 3))
 	}
 }

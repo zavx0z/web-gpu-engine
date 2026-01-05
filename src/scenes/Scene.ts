@@ -1,4 +1,5 @@
 import { Object3D } from "../core/Object3D"
+import { Color } from "../math/Color"
 
 /**
  * Класс для создания сцен.
@@ -7,6 +8,12 @@ import { Object3D } from "../core/Object3D"
 export class Scene extends Object3D {
 	public readonly isScene: true = true
 	public type = "Scene"
+
+	/**
+	 * Цвет фона сцены.
+	 * @default new Color(0, 0, 0)
+	 */
+	public background: Color = new Color(0, 0, 0)
 
 	constructor() {
 		super()
