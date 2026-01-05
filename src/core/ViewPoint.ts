@@ -5,159 +5,95 @@ import { Vector3 } from "../math/Vector3"
  * Параметры для создания точки обзора.
  */
 export interface ViewPointParameters {
-	/** HTML-элемент для отслеживания событий ввода (обычно canvas). */
 	element: HTMLElement
-	/**
-	 * Угол обзора в радианах.
-	 * @default 1
-	 * @min 0
-	 */
 	fov?: number
-	/**
-	 * Ближняя плоскость отсечения.
-	 * @default 0.1
-	 * @min 0
-	 */
 	near?: number
-	/**
-	 * Дальняя плоскость отсечения.
-	 * @default 1000
-	 */
 	far?: number
-	/**
-	 * Начальная позиция камеры.
-	 */
 	position?: { x: number; y: number; z: number }
+	target?: { x: number; y: number; z: number }
 }
 
+const EPSILON = 1e-6
+
 /**
- * Представляет точку обзора в 3D-пространстве, объединяя функциональность
- * камеры с перспективной проекцией и управления в стиле OrbitControls.
- *
- * ### Управление:
- * - **Вращение:** Зажать левую кнопку мыши и двигать / Двигать одним пальцем по тачпаду.
- * - **Масштабирование:** Прокрутка колесиком мыши / Жест "щипок" на тачпаде.
- * - **Панорамирование:** Зажать правую кнопку мыши и двигать / Смахивать двумя пальцами по тачпаду.
+ * Представляет точку обзора (камеру и управление) в 3D-пространстве.
+ * Реализует орбитальное управление на основе сферических координат,
+ * строго следуя контракту RH_ZO (Right-Handed, Z в [0, 1]).
  */
 export class ViewPoint {
-	// Параметры камеры
 	public fov: number
 	public aspect: number
 	public near: number
 	public far: number
 
-	// Матрицы и позиция
 	public position: Vector3 = new Vector3()
 	public viewMatrix: Matrix4 = new Matrix4()
 	public projectionMatrix: Matrix4 = new Matrix4()
 
-	// Параметры управления
 	private element: HTMLElement
-	private target: Vector3 = new Vector3()
-	private up: Vector3 = new Vector3(0, 1, 0)
+	private target: Vector3
 
-	// Состояния управления
+	// Сферические координаты для орбитального вращения
+	private radius: number
+	private alpha: number // Горизонтальный угол (азимут)
+	private beta: number  // Вертикальный угол (полярный)
+
 	private isRotating = false
 	private isPanning = false
 	private lastX = 0
 	private lastY = 0
 
-	// Углы для turntable-орбиты (аналог Blender): yaw вокруг Y, pitch вокруг X.
-	// pitch ограничен, чтобы камера не переворачивалась.
-	private pitch = 0 // в радианах, [-maxPitch, +maxPitch]
-	private yaw = 0 // в радианах, без ограничений
-	private radius = 5
-
-	/**
-	 * @param parameters Параметры для создания точки обзора.
-	 */
 	constructor(parameters: ViewPointParameters) {
 		this.element = parameters.element
-		// Используем оператор nullish coalescing для безопасного присваивания значений по умолчанию.
-		this.fov = parameters.fov ?? 1
+		this.fov = parameters.fov ?? 1 // примерно 57 градусов
 		this.near = parameters.near ?? 0.1
-		this.far = parameters.far ?? 1000 // Увеличено значение по умолчанию для надежности
+		this.far = parameters.far ?? 1000
 
-		// Валидация параметров
 		if (this.fov <= 0) throw new Error("Угол обзора (fov) должен быть больше нуля.")
 		if (this.near <= 0) throw new Error("Ближняя плоскость отсечения (near) должна быть больше нуля.")
 		if (this.far <= this.near) throw new Error("Дальняя плоскость отсечения (far) должна быть больше ближней (near).")
 
-		// Вычисляем начальное соотношение сторон из размеров элемента
 		this.aspect = this.element.clientWidth / this.element.clientHeight
 
-		if (parameters.position) {
-			const { x, y, z } = parameters.position
-			this.radius = Math.sqrt(x * x + y * y + z * z)
-			this.pitch = Math.asin(y / this.radius)
-			this.yaw = Math.atan2(x, z)
-		}
+		this.target = parameters.target ? new Vector3(parameters.target.x, parameters.target.y, parameters.target.z) : new Vector3(0, 0, 0)
+		const initialPosition = parameters.position ? new Vector3(parameters.position.x, parameters.position.y, parameters.position.z) : new Vector3(0, 0, 10)
+
+		// Инициализация сферических координат из начальной позиции
+		const offset = new Vector3().subVectors(initialPosition, this.target)
+		this.radius = offset.length()
+		this.alpha = Math.atan2(offset.x, offset.z)
+		this.beta = Math.acos(offset.y / this.radius)
 
 		this.updateProjectionMatrix()
 		this.attachEventListeners()
 		this.update()
 	}
 
-	/**
-	 * Обновляет соотношение сторон и матрицу проекции.
-	 * @param aspect Новое соотношение сторон (ширина / высота).
-	 */
 	public setAspectRatio(aspect: number): void {
 		if (aspect <= 0) return
 		this.aspect = aspect
 		this.updateProjectionMatrix()
 	}
 
-	/** Обновляет матрицу проекции. */
 	public updateProjectionMatrix(): void {
 		this.projectionMatrix.makePerspective(this.fov, this.aspect, this.near, this.far)
 	}
 
 	/**
-	 * Обновляет позицию и матрицу вида.
-	 *
-	 * Важно: мы намеренно НЕ используем `makeLookAt()` при управлении камерой.
-	 * Для turntable-навигации (как в Blender) матрица вида должна строиться
-	 * детерминированно из yaw/pitch без "плавающего" ролла около полюсов.
+	 * Пересчитывает позицию камеры из сферических координат и обновляет матрицу вида.
 	 */
 	public update = () => {
-		const sinYaw = Math.sin(this.yaw)
-		const cosYaw = Math.cos(this.yaw)
-		const sinPitch = Math.sin(this.pitch)
-		const cosPitch = Math.cos(this.pitch)
+		const sinBeta = Math.sin(this.beta)
+		const offset = new Vector3(
+			this.radius * sinBeta * Math.sin(this.alpha),
+			this.radius * Math.cos(this.beta),
+			this.radius * sinBeta * Math.cos(this.alpha),
+		)
 
-		// Направление от камеры к цели (взгляд вперёд)
-		const forward = new Vector3(sinYaw * cosPitch, sinPitch, cosYaw * cosPitch)
-		const offset = forward.clone().multiplyScalar(this.radius)
-
-		this.position.copy(this.target).sub(offset)
-
-		// Базис камеры без ролла (turntable): right всегда горизонтален
-		const right = new Vector3(cosYaw, 0, -sinYaw)
-		const up = new Vector3(-sinYaw * sinPitch, cosPitch, -cosYaw * sinPitch)
-		const back = forward.clone().multiplyScalar(-1)
-
-		const te = this.viewMatrix.elements
-		// column-major
-		te[0] = right.x
-		te[4] = up.x
-		te[8] = back.x
-		te[12] = -right.dot(this.position)
-		te[1] = right.y
-		te[5] = up.y
-		te[9] = back.y
-		te[13] = -up.dot(this.position)
-		te[2] = right.z
-		te[6] = up.z
-		te[10] = back.z
-		te[14] = -back.dot(this.position)
-		te[3] = 0
-		te[7] = 0
-		te[11] = 0
-		te[15] = 1
+		this.position.copy(this.target).add(offset)
+		this.viewMatrix.makeLookAt(this.position, this.target, new Vector3(0, 1, 0))
 	}
 
-	/** Удаляет слушатели событий во избежание утечек памяти. */
 	public dispose() {
 		this.element.removeEventListener("mousedown", this.onMouseDown)
 		document.removeEventListener("mousemove", this.onMouseMove)
@@ -167,6 +103,7 @@ export class ViewPoint {
 	}
 
 	private attachEventListeners() {
+		this.element.style.touchAction = "none"
 		this.element.addEventListener("mousedown", this.onMouseDown)
 		document.addEventListener("mousemove", this.onMouseMove)
 		document.addEventListener("mouseup", this.onMouseUp)
@@ -205,9 +142,6 @@ export class ViewPoint {
 
 	private onWheel = (event: WheelEvent) => {
 		event.preventDefault()
-		// Жесты трекпада:
-		// - обычный двухпальцевый скролл — панорамирование;
-		// - pinch — зум. На macOS pinch, как правило, даёт ctrlKey=true.
 		if (event.ctrlKey) {
 			this.handleZoom(event.deltaY)
 		} else {
@@ -217,65 +151,38 @@ export class ViewPoint {
 	}
 
 	/**
-	 * Обрабатывает вращение камеры на основе смещения курсора.
-	 * @param deltaX Смещение по горизонтали.
-	 * @param deltaY Смещение по вертикали.
+	 * Вращает камеру, изменяя сферические координаты.
 	 */
 	private handleRotation(deltaX: number, deltaY: number) {
 		const rotationSpeed = 0.005
-		// Инвертированное ощущение: вправо — вправо, вверх — вверх.
-		this.yaw += deltaX * rotationSpeed
-		this.pitch -= deltaY * rotationSpeed
+		this.alpha -= deltaX * rotationSpeed
+		this.beta -= deltaY * rotationSpeed
 
-		// Полностью свободная орбита вокруг объекта (как в Blender по умолчанию):
-		// без ограничений по вертикали, камера может обойти объект с любой стороны.
-		const twoPi = Math.PI * 2
-		this.yaw = ((this.yaw % twoPi) + twoPi) % twoPi
+		// Ограничиваем угол beta, чтобы избежать "переворота" камеры через полюса.
+		this.beta = Math.max(EPSILON, Math.min(Math.PI - EPSILON, this.beta))
 	}
 
 	/**
-	 * Обрабатывает панорамирование (перемещение точки обзора) в экранных координатах.
-	 *
-	 * Жесты интерпретируются так:
-	 * - движение двумя пальцами вправо (deltaX > 0) смещает ViewPoint вправо, объект уезжает влево;
-	 * - движение двумя пальцами вверх (deltaY < 0 на Mac) смещает ViewPoint вверх, объект уезжает вниз.
-	 *
-	 * Для этого мы работаем не в мировых осях, а в базисе самой камеры.
-	 * @param deltaX Смещение жеста по горизонтали в экранных координатах.
-	 * @param deltaY Смещение жеста по вертикали в экранных координатах.
+	 * Панорамирует камеру, сдвигая цель (target) в плоскости, перпендикулярной взгляду.
 	 */
 	private handlePan(deltaX: number, deltaY: number) {
-		// Скорость панорамирования зависит от расстояния до цели, чтобы ощущение было одинаковым
 		const panSpeed = 0.001 * this.radius
+		
+		// Извлекаем векторы "вправо" и "вверх" из матрицы вида.
+		const right = new Vector3(this.viewMatrix.elements[0], this.viewMatrix.elements[4], this.viewMatrix.elements[8])
+		const up = new Vector3(this.viewMatrix.elements[1], this.viewMatrix.elements[5], this.viewMatrix.elements[9])
 
-		const sinYaw = Math.sin(this.yaw)
-		const cosYaw = Math.cos(this.yaw)
-		const sinPitch = Math.sin(this.pitch)
-		const cosPitch = Math.cos(this.pitch)
+		const panOffset = right.multiplyScalar(-deltaX * panSpeed).add(up.multiplyScalar(deltaY * panSpeed))
 
-		// Базис камеры в turntable-режиме
-		const right = new Vector3(cosYaw, 0, -sinYaw)
-		const up = new Vector3(-sinYaw * sinPitch, cosPitch, -cosYaw * sinPitch)
-
-		// deltaX > 0 — двигаем ViewPoint вправо → объект визуально едет влево
-		const moveRight = right.multiplyScalar(deltaX * panSpeed)
-		// На Mac при "натуральном" скролле жест вверх даёт deltaY < 0.
-		// Мы хотим, чтобы объект уезжал вниз, значит ViewPoint должен сместиться вверх.
-		const moveUp = up.multiplyScalar(-deltaY * panSpeed)
-
-		this.target.add(moveRight).add(moveUp)
+		this.target.add(panOffset)
 	}
 
 	/**
-	 * Обрабатывает масштабирование (приближение/отдаление).
-	 * @param deltaY Значение прокрутки по оси Y.
+	 * Масштабирует, изменяя радиус до цели.
 	 */
 	private handleZoom(deltaY: number) {
-		// Используем Math.pow для плавного и пропорционального масштабирования.
-		// Инвертируем направление жеста pinch: разводим пальцы — приближение.
-		const scale = Math.pow(0.95, -deltaY * 0.02)
-		this.radius *= scale
-		// Ограничиваем минимальный радиус, чтобы камера не "влетела" внутрь цели.
-		this.radius = Math.max(0.5, this.radius)
+		const zoomSpeed = 0.1
+		this.radius += deltaY * zoomSpeed * 0.1
+		this.radius = Math.max(0.1, this.radius) // Не позволяем радиусу стать нулевым или отрицательным
 	}
 }

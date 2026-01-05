@@ -2,124 +2,66 @@ import { Quaternion } from "./Quaternion"
 import { Vector3 } from "./Vector3"
 
 /**
- * Представляет матрицу 4x4 в основном столбцовом порядке (column-major order).
- * Этот формат используется в WebGL/WebGPU для матричных операций.
+ * Представляет матрицу 4x4 в column-major порядке.
  */
 export class Matrix4 {
-	public elements: number[]
+	public elements: Float32Array
 
-	/**
-	 * Инициализирует новую матрицу 4x4 как единичную матрицу.
-	 */
 	constructor() {
-		// prettier-ignore
-		this.elements = [
+		this.elements = new Float32Array([
 			1, 0, 0, 0,
 			0, 1, 0, 0,
 			0, 0, 1, 0,
 			0, 0, 0, 1,
-		]
+		])
 	}
 
 	/**
-	 * Устанавливает матрицу в состояние единичной матрицы.
-	 * @returns {this} Текущий экземпляр матрицы.
+	 * Устанавливает значения этой матрицы.
+	 */
+	public set(
+		n11: number, n12: number, n13: number, n14: number,
+		n21: number, n22: number, n23: number, n24: number,
+		n31: number, n32: number, n33: number, n34: number,
+		n41: number, n42: number, n43: number, n44: number,
+	): this {
+		const te = this.elements
+		te[0] = n11; te[4] = n12; te[8] = n13; te[12] = n14
+		te[1] = n21; te[5] = n22; te[9] = n23; te[13] = n24
+		te[2] = n31; te[6] = n32; te[10] = n33; te[14] = n34
+		te[3] = n41; te[7] = n42; te[11] = n43; te[15] = n44
+		return this
+	}
+
+	/**
+	 * Устанавливает матрицу в единичную.
 	 */
 	public identity(): this {
-		// prettier-ignore
-		this.elements = [
+		return this.set(
 			1, 0, 0, 0,
 			0, 1, 0, 0,
 			0, 0, 1, 0,
 			0, 0, 0, 1,
-		]
-		return this
+		)
 	}
 
 	/**
-	 * Копирует значения из другой матрицы в эту.
-	 * @param m Матрица, из которой копируются значения.
+	 * Копирует значения из другой матрицы.
 	 */
 	public copy(m: Matrix4): this {
-		this.elements = m.elements.slice()
-		return this
-	}
-
-	/**
-	 * Устанавливает позицию (смещение) этой матрицы.
-	 * @param x X-координата.
-	 * @param y Y-координата.
-	 * @param z Z-координата.
-	 */
-	public setPosition(x: number, y: number, z: number): this {
-		const te = this.elements
-		te[12] = x
-		te[13] = y
-		te[14] = z
-		return this
-	}
-
-	/**
-	 * Создает матрицу вида (view matrix), направленную из `eye` в `target`.
-	 * @param eye Позиция камеры.
-	 * @param target Точка, на которую смотрит камера.
-	 * @param up Вектор, указывающий "вверх".
-	 */
-	public makeLookAt(eye: Vector3, target: Vector3, up: Vector3): this {
-		const z = new Vector3().subVectors(eye, target)
-
-		// Если eye == target, выбираем произвольное направление, чтобы избежать NaN.
-		if (z.length() === 0) {
-			z.z = 1
-		}
-
-		z.normalize()
-
-		// Handedness doesn't matter here, as we are just looking for perpendicular vectors.
-		let x = new Vector3().crossVectors(up, z)
-
-		// Если up почти параллелен направлению взгляда, базис становится вырожденным,
-		// что проявляется как дрожание около "полюсов". Подбираем запасной up.
-		if (x.length() < 1e-6) {
-			const fallbackUp = Math.abs(z.z) < 0.999 ? new Vector3(0, 0, 1) : new Vector3(1, 0, 0)
-			x = new Vector3().crossVectors(fallbackUp, z)
-		}
-
-		x.normalize()
-		const y = new Vector3().crossVectors(z, x).normalize()
-
-		const te = this.elements
-		// prettier-ignore
-		{
-			te[0] = x.x; te[4] = y.x; te[8] = z.x; te[12] = -x.dot(eye);
-			te[1] = x.y; te[5] = y.y; te[9] = z.y; te[13] = -y.dot(eye);
-			te[2] = x.z; te[6] = y.z; te[10] = z.z; te[14] = -z.dot(eye);
-			te[3] = 0;   te[7] = 0;   te[11] = 0;   te[15] = 1;
-		}
-
+		this.elements.set(m.elements)
 		return this
 	}
 
 	/**
 	 * Умножает эту матрицу на другую (this = this * m).
-	 * @param m Матрица для умножения.
 	 */
 	public multiply(m: Matrix4): this {
 		return this.multiplyMatrices(this, m)
 	}
 
 	/**
-	 * Умножает эту матрицу на другую слева (this = m * this).
-	 * @param m Матрица для умножения.
-	 */
-	public premultiply(m: Matrix4): this {
-		return this.multiplyMatrices(m, this)
-	}
-
-	/**
-	 * Устанавливает эту матрицу как результат умножения двух матриц (a * b).
-	 * @param a Левая матрица.
-	 * @param b Правая матрица.
+	 * Умножает матрицу `a` на `b` и сохраняет результат в эту матрицу.
 	 */
 	public multiplyMatrices(a: Matrix4, b: Matrix4): this {
 		const ae = a.elements
@@ -160,7 +102,108 @@ export class Matrix4 {
 	}
 
 	/**
-	 * Создает матрицу из позиции, кватерниона и масштаба.
+	 * Инвертирует матрицу. Использует канонический алгоритм.
+	 */
+	public invert(): this {
+		const te = this.elements
+		const n11 = te[0], n21 = te[1], n31 = te[2], n41 = te[3]
+		const n12 = te[4], n22 = te[5], n32 = te[6], n42 = te[7]
+		const n13 = te[8], n23 = te[9], n33 = te[10], n43 = te[11]
+		const n14 = te[12], n24 = te[13], n34 = te[14], n44 = te[15]
+
+		const t11 = n23 * n34 * n42 - n24 * n33 * n42 + n24 * n32 * n43 - n22 * n34 * n43 - n23 * n32 * n44 + n22 * n33 * n44
+		const t12 = n14 * n33 * n42 - n13 * n34 * n42 - n14 * n32 * n43 + n12 * n34 * n43 + n13 * n32 * n44 - n12 * n33 * n44
+		const t13 = n13 * n24 * n42 - n14 * n23 * n42 + n14 * n22 * n43 - n12 * n24 * n43 - n13 * n22 * n44 + n12 * n23 * n44
+		const t14 = n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34
+
+		const det = n11 * t11 + n21 * t12 + n31 * t13 + n41 * t14
+
+		if (det === 0) {
+			console.error("Matrix4.invert(): can\'t invert matrix, determinant is 0")
+			return this.identity()
+		}
+
+		const detInv = 1 / det
+
+		te[0] = t11 * detInv
+		te[1] = (n24 * n33 * n41 - n23 * n34 * n41 - n24 * n31 * n43 + n21 * n34 * n43 + n23 * n31 * n44 - n21 * n33 * n44) * detInv
+		te[2] = (n22 * n34 * n41 - n24 * n32 * n41 + n24 * n31 * n42 - n21 * n34 * n42 - n22 * n31 * n44 + n21 * n32 * n44) * detInv
+		te[3] = (n23 * n32 * n41 - n22 * n33 * n41 - n23 * n31 * n42 + n21 * n33 * n42 + n22 * n31 * n43 - n21 * n32 * n43) * detInv
+
+		te[4] = t12 * detInv
+		te[5] = (n13 * n34 * n41 - n14 * n33 * n41 + n14 * n31 * n43 - n11 * n34 * n43 - n13 * n31 * n44 + n11 * n33 * n44) * detInv
+		te[6] = (n14 * n32 * n41 - n12 * n34 * n41 - n14 * n31 * n42 + n11 * n34 * n42 + n12 * n31 * n44 - n11 * n32 * n44) * detInv
+		te[7] = (n12 * n33 * n41 - n13 * n32 * n41 + n13 * n31 * n42 - n11 * n33 * n42 - n12 * n31 * n43 + n11 * n32 * n43) * detInv
+
+		te[8] = t13 * detInv
+		te[9] = (n14 * n23 * n41 - n13 * n24 * n41 - n14 * n21 * n43 + n11 * n24 * n43 + n13 * n21 * n44 - n11 * n23 * n44) * detInv
+		te[10] = (n12 * n24 * n41 - n14 * n22 * n41 + n14 * n21 * n42 - n11 * n24 * n42 - n12 * n21 * n44 + n11 * n22 * n44) * detInv
+		te[11] = (n13 * n22 * n41 - n12 * n23 * n41 - n13 * n21 * n42 + n11 * n23 * n42 + n12 * n21 * n43 - n11 * n22 * n43) * detInv
+
+		te[12] = t14 * detInv
+		te[13] = (n13 * n24 * n31 - n14 * n23 * n31 + n14 * n21 * n33 - n11 * n24 * n33 - n13 * n21 * n34 + n11 * n23 * n34) * detInv
+		te[14] = (n14 * n22 * n31 - n12 * n24 * n31 - n14 * n21 * n32 + n11 * n24 * n32 + n12 * n21 * n34 - n11 * n22 * n34) * detInv
+		te[15] = (n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33) * detInv
+
+		return this
+	}
+
+	/**
+	 * Создает матрицу вида (view matrix) для правосторонней системы координат.
+	 * @param eye Позиция камеры.
+	 * @param target Точка, на которую смотрит камера.
+	 * @param up Вектор, указывающий "вверх".
+	 */
+	public makeLookAt(eye: Vector3, target: Vector3, up: Vector3): this {
+		const z = new Vector3().subVectors(eye, target).normalize()
+		const x = new Vector3().crossVectors(up, z).normalize()
+		const y = new Vector3().crossVectors(z, x)
+
+		return this.set(
+			x.x, x.y, x.z, -x.dot(eye),
+			y.x, y.y, y.z, -y.dot(eye),
+			z.x, z.y, z.z, -z.dot(eye),
+			0,   0,   0,   1
+		)
+	}
+
+	/**
+	 * Создает матрицу проекции для правосторонней системы координат (RH_ZO, z в [0, 1]).
+	 * @param fov Угол обзора в радианах.
+	 * @param aspect Соотношение сторон.
+	 * @param near Ближняя плоскость отсечения.
+	 * @param far Дальняя плоскость отсечения.
+	 */
+	public makePerspective(fov: number, aspect: number, near: number, far: number): this {
+		const te = this.elements
+		const f = 1.0 / Math.tan(fov / 2)
+		const nf = 1 / (near - far)
+
+		te[0] = f / aspect
+		te[1] = 0
+		te[2] = 0
+		te[3] = 0
+
+		te[4] = 0
+		te[5] = f
+		te[6] = 0
+		te[7] = 0
+
+		te[8] = 0
+		te[9] = 0
+		te[10] = far * nf
+		te[11] = -1
+
+		te[12] = 0
+		te[13] = 0
+		te[14] = near * far * nf
+		te[15] = 0
+
+		return this
+	}
+
+	/**
+	 * Создает матрицу, представляющую трансформацию из позиции, кватерниона и масштаба.
 	 * @param position Вектор позиции.
 	 * @param quaternion Кватернион вращения.
 	 * @param scale Вектор масштаба.
@@ -200,43 +243,9 @@ export class Matrix4 {
 	}
 
 	/**
-	 * Создает матрицу перспективной проекции, совместимую с WebGPU (Z-координаты в диапазоне [0, 1]).
-	 * @param {number} fov - Угол обзора в радианах.
-	 * @param {number} aspect - Соотношение сторон.
-	 * @param {number} near - Ближняя плоскость отсечения.
-	 * @param {number} far - Дальняя плоскость отсечения.
-	 * @returns {this} Текущий экземпляр матрицы.
+	 * Создает матрицу вращения из кватерниона.
 	 */
-	public makePerspective(fov: number, aspect: number, near: number, far: number): this {
-		const te = this.elements
-		const f = 1.0 / Math.tan(fov / 2)
-
-		te[0] = f / aspect
-		te[1] = 0
-		te[2] = 0
-		te[3] = 0
-		te[4] = 0
-		te[5] = f
-		te[6] = 0
-		te[7] = 0
-		te[8] = 0
-		te[9] = 0
-		te[11] = -1
-		te[12] = 0
-		te[13] = 0
-		te[15] = 0
-
-		if (far !== null && far !== Infinity) {
-			const nf = 1 / (near - far)
-			// WebGPU/Vulkan/Metal-style projection matrix
-			te[10] = far * nf
-			te[14] = far * near * nf
-		} else {
-			// Infinite projection
-			te[10] = -1
-			te[14] = -near
-		}
-
-		return this
+	public makeRotationFromQuaternion(q: Quaternion): this {
+		return this.compose(new Vector3(0, 0, 0), q, new Vector3(1, 1, 1))
 	}
 }

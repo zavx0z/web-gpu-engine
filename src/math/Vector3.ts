@@ -1,3 +1,5 @@
+import { Quaternion } from "./Quaternion"
+
 /**
  * Класс для представления 3D-векторов.
  */
@@ -150,5 +152,36 @@ export class Vector3 {
 	 */
 	public toArray(): [number, number, number] {
 		return [this.x, this.y, this.z]
+	}
+
+	/**
+	 * Применяет к вектору вращение, заданное кватернионом.
+	 * @param q Кватернион.
+	 */
+	public applyQuaternion(q: Quaternion): this {
+		const x = this.x, y = this.y, z = this.z
+		const qx = q.x, qy = q.y, qz = q.z, qw = q.w
+
+		// Вычисление uv = 2.0 * cross(q.xyz, v)
+		const uvx = 2 * (qy * z - qz * y)
+		const uvy = 2 * (qz * x - qx * z)
+		const uvz = 2 * (qx * y - qy * x)
+
+		// Вычисление v + q.w * uv + cross(q.xyz, uv)
+		this.x = x + qw * uvx + (qy * uvz - qz * uvy)
+		this.y = y + qw * uvy + (qz * uvx - qx * uvz)
+		this.z = z + qw * uvz + (qx * uvy - qy * uvx)
+
+		return this
+	}
+
+	/**
+	 * Инвертирует вектор (умножает все компоненты на -1).
+	 */
+	public negate(): this {
+		this.x = -this.x
+		this.y = -this.y
+		this.z = -this.z
+		return this
 	}
 }
