@@ -2,9 +2,7 @@ if (import.meta.hot) {
 	import.meta.hot.accept()
 }
 
-import { mat4 } from "gl-matrix"
-import { AxesHelper } from "../src/helpers/AxesHelper"
-import { BasicMaterial, Mesh, Scene, TorusGeometry, ViewPoint, WebGPURenderer } from "../src/WebGPUEngine"
+import { AxesHelper, GLTFLoader, Scene, ViewPoint, WebGPURenderer, quat } from "../src/WebGPUEngine"
 
 document.addEventListener("DOMContentLoaded", async () => {
 	const renderer = new WebGPURenderer()
@@ -23,16 +21,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 			fov: (2 * Math.PI) / 5,
 		})
 
-		const geometry = new TorusGeometry({ radius: 0.5, tube: 0.2, radialSegments: 32, tubularSegments: 24 })
-		const material = new BasicMaterial({ color: [1.0, 0.8, 0.0, 1.0], wireframe: true })
-		const mesh = new Mesh({ geometry, material })
-		scene.add(mesh)
-
-		const modelMatrix = mat4.create()
+		// Загружаем модель
+		const loader = new GLTFLoader()
+		const gltf = await loader.load(
+			"https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf"
+		)
+		scene.add(gltf.scene)
 
 		function animate() {
-			mat4.rotateY(modelMatrix, modelMatrix, 0.01)
-			mesh.modelMatrix = modelMatrix
+			// Вращаем сцену модели, чтобы ее было видно со всех сторон
+			quat.rotateY(gltf.scene.quaternion, gltf.scene.quaternion, 0.005)
+			gltf.scene.updateMatrix() // Обновляем матрицу после вращения
 
 			renderer.render(scene, viewPoint)
 			requestAnimationFrame(animate)

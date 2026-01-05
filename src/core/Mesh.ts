@@ -1,11 +1,11 @@
-import { Object3D } from "./Object3D"
+import { Object3D, Object3DParameters } from "./Object3D"
 import { BufferGeometry } from "./BufferGeometry"
 import { Material } from "../materials/Material"
 
 /**
  * Параметры для создания полигональной сетки.
  */
-export interface MeshParameters {
+export interface MeshParameters extends Object3DParameters {
 	/**
 	 * Геометрия сетки, определяющая ее форму.
 	 */
@@ -30,7 +30,7 @@ export class Mesh extends Object3D {
 	 * @param parameters Параметры для создания сетки.
 	 */
 	constructor(parameters: MeshParameters) {
-		super()
+		super(parameters)
 		const { geometry, material } = parameters
 		this.geometry = geometry
 		this.material = material

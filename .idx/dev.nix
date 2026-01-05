@@ -1,12 +1,17 @@
-# .idx/dev.nix
 { pkgs, ... }: {
   channel = "unstable";
-  packages = [ pkgs.bun ]; # Убедитесь, что bun добавлен
+  packages = [ pkgs.bun ];
+  idx.extensions = [
+    "biomejs.biome"
+    "esbenp.prettier-vscode"
+    "kamikillerto.vscode-colorize"
+    "mhutchie.git-graph"
+    "oven.bun-vscode"
+  ];
   idx.previews = {
     enable = true;
     previews = {
       web = {
-        # Переменная $PORT будет автоматически подставлена IDX
         command = [ "bun" "run" "--hot" "serve.ts" ];
         manager = "web";
         env = {

@@ -1,295 +1,243 @@
 import { mat4 } from "gl-matrix"
-import type { Scene } from "../scenes/Scene"
-import type { ViewPoint } from "../core/ViewPoint"
-import { Object3D } from "../core/Object3D"
+import { Scene } from "../scenes/Scene"
+import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
-import { LineSegments } from "../objects/LineSegments"
-import { LineBasicMaterial } from "../materials/LineBasicMaterial"
-import { BasicMaterial } from "../materials/BasicMaterial"
+import { Object3D } from "../core/Object3D"
+import { BufferGeometry } from "../core/BufferGeometry"
+
+interface GeometryBuffers {
+	positionBuffer: GPUBuffer
+	indexBuffer?: GPUBuffer
+}
+
+interface RenderItem {
+	mesh: Mesh
+	worldMatrix: mat4
+}
 
 /**
- * Отвечает за рендеринг сцены с использованием WebGPU.
+ * Отрисовщик, использующий технологию WebGPU для рендеринга 3D-сцен.
  */
 export class WebGPURenderer {
-	public canvas: HTMLCanvasElement | null = null
-	public adapter: GPUAdapter | null = null
-	public device: GPUDevice | null = null
-	public context: GPUCanvasContext | null = null
-	public solidPipeline: GPURenderPipeline | null = null
-	public wireframePipeline: GPURenderPipeline | null = null
-	public vertexColorPipeline: GPURenderPipeline | null = null
+	private device: GPUDevice | null = null
+	private context: GPUCanvasContext | null = null
+	private presentationFormat: GPUTextureFormat | null = null
+	private renderPipeline: GPURenderPipeline | null = null
+	private uniformBuffer: GPUBuffer | null = null
+	private uniformBindGroup: GPUBindGroup | null = null
+	private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
 
+	/**
+	 * HTML-элемент canvas, на котором происходит отрисовка.
+	 */
+	public canvas: HTMLCanvasElement | null = null
+
+	/**
+	 * Инициализирует WebGPU, настраивает устройство и контекст.
+	 * @returns Promise, который разрешается после успешной инициализации.
+	 */
 	public async init(): Promise<void> {
 		if (!navigator.gpu) {
 			throw new Error("WebGPU не поддерживается в этом браузере.")
 		}
 
-		this.adapter = await navigator.gpu.requestAdapter()
-		if (!this.adapter) {
-			throw new Error("Не найден подходящий GPUAdapter.")
+		const adapter = await navigator.gpu.requestAdapter()
+		if (!adapter) {
+			throw new Error("Не удалось получить WebGPU адаптер.")
 		}
 
-		this.device = await this.adapter.requestDevice()
-
+		this.device = await adapter.requestDevice()
 		this.canvas = document.createElement("canvas")
-		this.canvas.width = window.innerWidth
-		this.canvas.height = window.innerHeight
-		document.body.appendChild(this.canvas)
-
 		this.context = this.canvas.getContext("webgpu")
+
 		if (!this.context) {
 			throw new Error("Не удалось получить контекст WebGPU.")
 		}
 
-		const presentationFormat = navigator.gpu.getPreferredCanvasFormat()
+		this.presentationFormat = navigator.gpu.getPreferredCanvasFormat()
 		this.context.configure({
 			device: this.device,
-			format: presentationFormat,
+			format: this.presentationFormat,
 		})
 
-		const solidShaderModule = this.device.createShaderModule({
+		this.setupRenderPipeline()
+	}
+
+	private setupRenderPipeline(): void {
+		if (!this.device || !this.presentationFormat) return
+
+		this.uniformBuffer = this.device.createBuffer({
+			size: 64 * 2, // 2 матрицы 4x4 (view-projection и model)
+			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+		})
+
+		const bindGroupLayout = this.device.createBindGroupLayout({
+			entries: [
+				{
+					binding: 0,
+					visibility: GPUShaderStage.VERTEX,
+					buffer: { type: "uniform" },
+				},
+			],
+		})
+
+		this.uniformBindGroup = this.device.createBindGroup({
+			layout: bindGroupLayout,
+			entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }],
+		})
+
+		const pipelineLayout = this.device.createPipelineLayout({
+			bindGroupLayouts: [bindGroupLayout],
+		})
+
+		const shaderModule = this.device.createShaderModule({
 			code: `
-                struct CameraUniforms {
-                    modelViewProjectionMatrix : mat4x4<f32>,
-                };
-                @binding(0) @group(0) var<uniform> cameraUniforms : CameraUniforms;
+        struct Uniforms {
+          viewProjectionMatrix: mat4x4<f32>,
+          modelMatrix: mat4x4<f32>,
+        }
 
-				struct MaterialUniforms {
-					color: vec4<f32>,
-				};
-				@binding(1) @group(0) var<uniform> materialUniforms : MaterialUniforms;
+        @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
-                @vertex
-                fn vertex_main(@location(0) position : vec3<f32>) -> @builtin(position) vec4<f32> {
-                    return cameraUniforms.modelViewProjectionMatrix * vec4<f32>(position, 1.0);
-                }
+        struct VertexOutput {
+          @builtin(position) position: vec4<f32>,
+        }
 
-                @fragment
-                fn fragment_main() -> @location(0) vec4<f32> {
-                    return materialUniforms.color;
-                }
-            `,
+        @vertex
+        fn vs_main(@location(0) position: vec4<f32>) -> VertexOutput {
+          var out: VertexOutput;
+          out.position = uniforms.viewProjectionMatrix * uniforms.modelMatrix * position;
+          return out;
+        }
+
+        @fragment
+        fn fs_main() -> @location(0) vec4<f32> {
+          return vec4<f32>(1.0, 1.0, 1.0, 1.0); // Возвращаем белый цвет
+        }
+      `,
 		})
 
-		const solidPipelineDescriptor: GPURenderPipelineDescriptor = {
-			layout: "auto",
+		this.renderPipeline = this.device.createRenderPipeline({
+			layout: pipelineLayout,
 			vertex: {
-				module: solidShaderModule,
-				entryPoint: "vertex_main",
+				module: shaderModule,
+				entryPoint: "vs_main",
 				buffers: [
 					{
-						arrayStride: 12,
-						attributes: [
-							{
-								shaderLocation: 0,
-								offset: 0,
-								format: "float32x3",
-							},
-						],
+						arrayStride: 12, // 3 * 4 байта (vec3<f32>)
+						attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }],
 					},
 				],
 			},
 			fragment: {
-				module: solidShaderModule,
-				entryPoint: "fragment_main",
-				targets: [{ format: presentationFormat }],
+				module: shaderModule,
+				entryPoint: "fs_main",
+				targets: [{ format: this.presentationFormat }],
 			},
 			primitive: {
 				topology: "triangle-list",
-			},
-		}
-
-		this.solidPipeline = this.device.createRenderPipeline(solidPipelineDescriptor)
-
-		const wireframePipelineDescriptor: GPURenderPipelineDescriptor = {
-			...solidPipelineDescriptor,
-			primitive: {
-				topology: "line-list",
-			},
-		}
-		this.wireframePipeline = this.device.createRenderPipeline(wireframePipelineDescriptor)
-
-		const vertexColorShaderModule = this.device.createShaderModule({
-			code: `
-                struct Uniforms {
-                    modelViewProjectionMatrix : mat4x4<f32>,
-                };
-                @binding(0) @group(0) var<uniform> uniforms : Uniforms;
-
-                struct VertexInput {
-                    @location(0) position : vec3<f32>,
-                    @location(1) color: vec3<f32>,
-                };
-
-                struct VertexOutput {
-                    @builtin(position) position : vec4<f32>,
-                    @location(0) color : vec4<f32>,
-                };
-
-                @vertex
-                fn vertex_main(input: VertexInput) -> VertexOutput {
-                    var output : VertexOutput;
-                    output.position = uniforms.modelViewProjectionMatrix * vec4<f32>(input.position, 1.0);
-                    output.color = vec4<f32>(input.color, 1.0);
-                    return output;
-                }
-
-                @fragment
-                fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
-                    return input.color;
-                }
-            `,
-		})
-
-		this.vertexColorPipeline = this.device.createRenderPipeline({
-			layout: "auto",
-			vertex: {
-				module: vertexColorShaderModule,
-				entryPoint: "vertex_main",
-				buffers: [
-					{
-						arrayStride: 12,
-						attributes: [
-							{ shaderLocation: 0, offset: 0, format: "float32x3" },
-						],
-					},
-					{
-						arrayStride: 12,
-						attributes: [
-							{ shaderLocation: 1, offset: 0, format: "float32x3" },
-						],
-					},
-				],
-			},
-			fragment: {
-				module: vertexColorShaderModule,
-				entryPoint: "fragment_main",
-				targets: [{ format: presentationFormat }],
-			},
-			primitive: {
-				topology: "line-list",
 			},
 		})
 	}
 
 	public setSize(width: number, height: number): void {
-		if (!this.canvas) return
-		this.canvas.width = width
-		this.canvas.height = height
+		if (this.canvas) {
+			this.canvas.width = width
+			this.canvas.height = height
+		}
 	}
 
 	public render(scene: Scene, viewPoint: ViewPoint): void {
-		const { device, context, solidPipeline, wireframePipeline, vertexColorPipeline } = this
-		if (!device || !context || !solidPipeline || !wireframePipeline || !vertexColorPipeline) {
-			return
-		}
+		if (!this.device || !this.context || !this.renderPipeline || !this.uniformBuffer) return
 
-		const commandEncoder = device.createCommandEncoder()
-		const textureView = context.getCurrentTexture().createView()
+		const commandEncoder = this.device.createCommandEncoder()
+		const textureView = this.context.getCurrentTexture().createView()
 
 		const renderPassDescriptor: GPURenderPassDescriptor = {
 			colorAttachments: [
 				{
 					view: textureView,
-					clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
 					loadOp: "clear",
 					storeOp: "store",
+					clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
 				},
 			],
 		}
 
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
+		passEncoder.setPipeline(this.renderPipeline)
 
-		scene.children.forEach((object: Object3D) => {
-			const mvpMatrix = mat4.create()
-			mat4.multiply(mvpMatrix, viewPoint.projectionMatrix, viewPoint.viewMatrix)
-			mat4.multiply(mvpMatrix, mvpMatrix, object.modelMatrix)
+		const vpMatrix = mat4.create()
+		mat4.multiply(vpMatrix, viewPoint.projectionMatrix, viewPoint.viewMatrix)
+		this.device.queue.writeBuffer(this.uniformBuffer, 0, vpMatrix as unknown as ArrayBuffer)
 
-			const cameraUniformBuffer = device.createBuffer({
-				size: 64,
-				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-			})
-			device.queue.writeBuffer(cameraUniformBuffer, 0, (mvpMatrix as Float32Array).buffer)
+		const renderList: RenderItem[] = []
+		this.collectRenderables(scene, mat4.create(), renderList)
 
-			if ((object as Mesh).isMesh) {
-				const mesh = object as Mesh
-				const material = mesh.material as BasicMaterial
-				if (material && mesh.geometry.attributes.position && mesh.geometry.index) {
-					const pipeline = material.wireframe ? wireframePipeline : solidPipeline
-					passEncoder.setPipeline(pipeline)
-
-					const materialUniformBuffer = device.createBuffer({
-						size: 16, // vec4<f32>
-						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-					})
-					device.queue.writeBuffer(materialUniformBuffer, 0, new Float32Array(material.color))
-
-					const positionBuffer = device.createBuffer({
-						size: mesh.geometry.attributes.position.array.byteLength,
-						usage: GPUBufferUsage.VERTEX,
-						mappedAtCreation: true,
-					})
-					new Float32Array(positionBuffer.getMappedRange()).set(mesh.geometry.attributes.position.array)
-					positionBuffer.unmap()
-
-					const indexBuffer = device.createBuffer({
-						size: mesh.geometry.index.array.byteLength,
-						usage: GPUBufferUsage.INDEX,
-						mappedAtCreation: true,
-					})
-					new Uint16Array(indexBuffer.getMappedRange()).set(mesh.geometry.index.array)
-					indexBuffer.unmap()
-
-					const uniformBindGroup = device.createBindGroup({
-						layout: pipeline.getBindGroupLayout(0),
-						entries: [
-							{ binding: 0, resource: { buffer: cameraUniformBuffer } },
-							{ binding: 1, resource: { buffer: materialUniformBuffer } },
-						],
-					})
-
-					passEncoder.setBindGroup(0, uniformBindGroup)
-					passEncoder.setVertexBuffer(0, positionBuffer)
-					passEncoder.setIndexBuffer(indexBuffer, "uint16")
-					passEncoder.drawIndexed(mesh.geometry.index.count)
-				}
-			} else if ((object as LineSegments).isLineSegments) {
-				const line = object as LineSegments
-				const material = line.material as LineBasicMaterial
-				if (material.vertexColors && line.geometry.attributes.position && line.geometry.attributes.color) {
-					passEncoder.setPipeline(vertexColorPipeline)
-
-					const positionBuffer = device.createBuffer({
-						size: line.geometry.attributes.position.array.byteLength,
-						usage: GPUBufferUsage.VERTEX,
-						mappedAtCreation: true,
-					})
-					new Float32Array(positionBuffer.getMappedRange()).set(line.geometry.attributes.position.array)
-					positionBuffer.unmap()
-
-					const colorBuffer = device.createBuffer({
-						size: line.geometry.attributes.color.array.byteLength,
-						usage: GPUBufferUsage.VERTEX,
-						mappedAtCreation: true,
-					})
-					new Float32Array(colorBuffer.getMappedRange()).set(line.geometry.attributes.color.array)
-					colorBuffer.unmap()
-
-					const uniformBindGroup = device.createBindGroup({
-						layout: vertexColorPipeline.getBindGroupLayout(0),
-						entries: [{ binding: 0, resource: { buffer: cameraUniformBuffer } }],
-					})
-
-					passEncoder.setBindGroup(0, uniformBindGroup)
-					passEncoder.setVertexBuffer(0, positionBuffer)
-					passEncoder.setVertexBuffer(1, colorBuffer)
-					passEncoder.draw(line.geometry.attributes.position.count)
-				}
-			}
-		})
+		for (const item of renderList) {
+			this.renderMesh(passEncoder, item.mesh, item.worldMatrix)
+		}
 
 		passEncoder.end()
+		this.device.queue.submit([commandEncoder.finish()])
+	}
 
-		device.queue.submit([commandEncoder.finish()])
+	private collectRenderables(object: Object3D, parentWorldMatrix: mat4, renderList: RenderItem[]): void {
+		if (!object.visible) return
+
+		const worldMatrix = mat4.create()
+		mat4.multiply(worldMatrix, parentWorldMatrix, object.modelMatrix)
+
+		if (object instanceof Mesh) {
+			renderList.push({ mesh: object, worldMatrix })
+		}
+
+		for (const child of object.children) {
+			this.collectRenderables(child, worldMatrix, renderList)
+		}
+	}
+
+	private getOrCreateGeometryBuffers(geometry: BufferGeometry): GeometryBuffers {
+		if (this.geometryCache.has(geometry)) {
+			return this.geometryCache.get(geometry)!
+		}
+
+		const positionBuffer = this.device!.createBuffer({
+			size: geometry.attributes.position.array.byteLength,
+			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+		})
+		this.device!.queue.writeBuffer(positionBuffer, 0, geometry.attributes.position.array)
+
+		let indexBuffer: GPUBuffer | undefined
+		if (geometry.index) {
+			indexBuffer = this.device!.createBuffer({
+				size: geometry.index.array.byteLength,
+				usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+			})
+			this.device!.queue.writeBuffer(indexBuffer, 0, geometry.index.array)
+		}
+
+		const buffers: GeometryBuffers = { positionBuffer, indexBuffer }
+		this.geometryCache.set(geometry, buffers)
+		return buffers
+	}
+
+	private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh, worldMatrix: mat4): void {
+		if (!this.device || !this.uniformBindGroup || !this.uniformBuffer) return
+
+		this.device.queue.writeBuffer(this.uniformBuffer, 64, worldMatrix as unknown as ArrayBuffer)
+		passEncoder.setBindGroup(0, this.uniformBindGroup)
+
+		const { positionBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
+
+		passEncoder.setVertexBuffer(0, positionBuffer)
+
+		if (indexBuffer) {
+			const indexFormat = mesh.geometry.index!.array instanceof Uint16Array ? "uint16" : "uint32"
+			passEncoder.setIndexBuffer(indexBuffer, indexFormat)
+			passEncoder.drawIndexed(mesh.geometry.index!.count)
+		} else {
+			passEncoder.draw(mesh.geometry.attributes.position.count)
+		}
 	}
 }

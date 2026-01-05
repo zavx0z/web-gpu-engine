@@ -6,31 +6,38 @@ export class BufferAttribute {
 	/**
 	 * Указывает, что данный объект является BufferAttribute.
 	 */
-    public readonly isBufferAttribute: true = true
+	public readonly isBufferAttribute: true = true
 	/**
 	 * Массив с данными.
 	 */
-    public array: any
+	public array: any
 	/**
 	 * Размер одного элемента (например, 3 для векторов).
 	 */
-    public itemSize: number
+	public itemSize: number
+	/**
+	 * Указывает, должны ли данные быть нормализованы (между 0 и 1 для целых чисел со знаком, или -1 и 1 для целых без знака).
+	 * @default false
+	 */
+	public normalized: boolean
 
 	/**
 	 * @param array Массив с данными.
 	 * @param itemSize Размер одного элемента.
+	 * @param normalized Должны ли данные быть нормализованы.
 	 */
-    constructor(array: any, itemSize: number) {
-        this.array = array
-        this.itemSize = itemSize
-    }
+	constructor(array: any, itemSize: number, normalized = false) {
+		this.array = array
+		this.itemSize = itemSize
+		this.normalized = normalized
+	}
 
 	/**
 	 * Количество элементов в буфере.
 	 */
-    get count(): number {
-        return this.array.length / this.itemSize
-    }
+	get count(): number {
+		return this.array.length / this.itemSize
+	}
 }
 
 /**
@@ -40,8 +47,9 @@ export class Float32BufferAttribute extends BufferAttribute {
 	/**
 	 * @param array Массив чисел или Float32Array.
 	 * @param itemSize Размер одного элемента.
+	 * @param normalized Должны ли данные быть нормализованы.
 	 */
-    constructor(array: number[] | Float32Array, itemSize: number) {
-        super(new Float32Array(array), itemSize)
-    }
+	constructor(array: number[] | Float32Array, itemSize: number, normalized = false) {
+		super(new Float32Array(array), itemSize, normalized)
+	}
 }
