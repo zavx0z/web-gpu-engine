@@ -232,10 +232,15 @@ export class ViewPoint {
 		const offset = new Vector3().subVectors(this.position, this.target)
 		const panSpeed = 0.001 * offset.length()
 
-		const right = new Vector3().crossVectors(this.up, offset).normalize()
+		const te = this.viewMatrix.elements
+		// Вектор "вправо" камеры находится в первой строке матрицы вида (в column-major это te[0], te[4], te[8])
+		const panRight = new Vector3(te[0], te[4], te[8])
+		// Вектор "вверх" камеры находится во второй строке матрицы вида (te[1], te[5], te[9])
+		const panUp = new Vector3(te[1], te[5], te[9])
+
 		const panDelta = new Vector3()
-			.add(right.multiplyScalar(-deltaX * panSpeed))
-			.add(this.up.clone().multiplyScalar(deltaY * panSpeed))
+			.add(panRight.multiplyScalar(deltaX * panSpeed))
+			.add(panUp.multiplyScalar(-deltaY * panSpeed))
 
 		// При панорамировании сдвигаем и позицию, и цель
 		this.position.add(panDelta)
