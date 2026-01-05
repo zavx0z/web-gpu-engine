@@ -86,6 +86,7 @@ export class ViewPoint {
 		this.element.removeEventListener("touchend", this.onTouchEnd)
 		this.element.removeEventListener("touchcancel", this.onTouchEnd)
 		this.element.removeEventListener("touchmove", this.onTouchMove)
+		this.element.removeEventListener("gesturestart", this.onGestureStart)
 	}
 
 	private attachEventListeners() {
@@ -100,9 +101,14 @@ export class ViewPoint {
 		this.element.addEventListener("touchend", this.onTouchEnd)
 		this.element.addEventListener("touchcancel", this.onTouchEnd)
 		this.element.addEventListener("touchmove", this.onTouchMove, { passive: false })
+		// Предотвращаем стандартное поведение масштабирования страницы на iOS
+		this.element.addEventListener("gesturestart", this.onGestureStart, { passive: false })
 	}
 
 	private preventContextMenu = (e: Event) => e.preventDefault()
+
+	// Предотвращаем масштабирование всей страницы на iOS при pinch-to-zoom
+	private onGestureStart = (event: Event) => event.preventDefault()
 
 	private onMouseDown = (event: MouseEvent) => {
 		event.preventDefault()
