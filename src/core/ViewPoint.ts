@@ -1,4 +1,5 @@
-import { vec3, mat4 } from "gl-matrix"
+import { Matrix4 } from "../math/Matrix4"
+import { Vector3 } from "../math/Vector3"
 
 /**
  * Параметры для создания точки обзора.
@@ -20,9 +21,13 @@ export interface ViewPointParameters {
 	near?: number
 	/**
 	 * Дальняя плоскость отсечения.
-	 * @default 100
+	 * @default 1000
 	 */
 	far?: number
+	/**
+	 * Начальная позиция камеры.
+	 */
+	position?: { x: number; y: number; z: number }
 }
 
 /**
@@ -42,13 +47,14 @@ export class ViewPoint {
 	public far: number
 
 	// Матрицы и позиция
-	public position: vec3 = vec3.create()
-	public viewMatrix: mat4 = mat4.create()
-	public projectionMatrix: mat4 = mat4.create()
+	public position: Vector3 = new Vector3()
+	public viewMatrix: Matrix4 = new Matrix4()
+	public projectionMatrix: Matrix4 = new Matrix4()
 
 	// Параметры управления
 	private element: HTMLElement
-	private target: vec3 = vec3.create()
+	private target: Vector3 = new Vector3()
+	private up: Vector3 = new Vector3(0, 1, 0)
 
 	// Состояния управления
 	private isRotating = false
@@ -65,20 +71,26 @@ export class ViewPoint {
 	 * @param parameters Параметры для создания точки обзора.
 	 */
 	constructor(parameters: ViewPointParameters) {
-		const { element, fov = 1, near = 0.1, far = 100 } = parameters
-
-		this.element = element
-		this.fov = fov
-		this.near = near
-		this.far = far
+		this.element = parameters.element
+		// Используем оператор nullish coalescing для безопасного присваивания значений по умолчанию.
+		this.fov = parameters.fov ?? 1
+		this.near = parameters.near ?? 0.1
+		this.far = parameters.far ?? 1000 // Увеличено значение по умолчанию для надежности
 
 		// Валидация параметров
-		if (fov <= 0) throw new Error("Угол обзора (fov) должен быть больше нуля.")
-		if (near <= 0) throw new Error("Ближняя плоскость отсечения (near) должна быть больше нуля.")
-		if (far <= near) throw new Error("Дальняя плоскость отсечения (far) должна быть больше ближней (near).")
+		if (this.fov <= 0) throw new Error("Угол обзора (fov) должен быть больше нуля.")
+		if (this.near <= 0) throw new Error("Ближняя плоскость отсечения (near) должна быть больше нуля.")
+		if (this.far <= this.near) throw new Error("Дальняя плоскость отсечения (far) должна быть больше ближней (near).")
 
 		// Вычисляем начальное соотношение сторон из размеров элемента
-		this.aspect = element.clientWidth / element.clientHeight
+		this.aspect = this.element.clientWidth / this.element.clientHeight
+
+		if (parameters.position) {
+			const { x, y, z } = parameters.position
+			this.radius = Math.sqrt(x * x + y * y + z * z)
+			this.phi = Math.acos(y / this.radius)
+			this.theta = Math.atan2(x, z)
+		}
 
 		this.updateProjectionMatrix()
 		this.attachEventListeners()
@@ -87,29 +99,28 @@ export class ViewPoint {
 
 	/**
 	 * Обновляет соотношение сторон и матрицу проекции.
-	 * @param width Новая ширина элемента (в CSS-пикселях).
-	 * @param height Новая высота элемента (в CSS-пикселях).
+	 * @param aspect Новое соотношение сторон (ширина / высота).
 	 */
-	public setAspectRatio(width: number, height: number): void {
-		if (width <= 0 || height <= 0) return
-		this.aspect = width / height
+	public setAspectRatio(aspect: number): void {
+		if (aspect <= 0) return
+		this.aspect = aspect
 		this.updateProjectionMatrix()
 	}
 
 	/** Обновляет матрицу проекции. */
 	public updateProjectionMatrix(): void {
-		mat4.perspective(this.projectionMatrix, this.fov, this.aspect, this.near, this.far)
+		this.projectionMatrix.makePerspective(this.fov, this.aspect, this.near, this.far)
 	}
 
 	/** Обновляет позицию и матрицу вида на основе текущих сферических координат. */
 	public update = () => {
-		const offset = vec3.create()
-		offset[0] = this.radius * Math.sin(this.phi) * Math.sin(this.theta)
-		offset[1] = this.radius * Math.cos(this.phi)
-		offset[2] = this.radius * Math.sin(this.phi) * Math.cos(this.theta)
+		const offset = new Vector3()
+		offset.x = this.radius * Math.sin(this.phi) * Math.sin(this.theta)
+		offset.y = this.radius * Math.cos(this.phi)
+		offset.z = this.radius * Math.sin(this.phi) * Math.cos(this.theta)
 
-		vec3.add(this.position, this.target, offset)
-		mat4.lookAt(this.viewMatrix, this.position, this.target, vec3.fromValues(0, 1, 0))
+		this.position.copy(this.target).add(offset)
+		this.viewMatrix.makeLookAt(this.position, this.target, this.up)
 	}
 
 	/** Удаляет слушатели событий во избежание утечек памяти. */
@@ -160,19 +171,7 @@ export class ViewPoint {
 
 	private onWheel = (event: WheelEvent) => {
 		event.preventDefault()
-
-		// Жест "щипок" (pinch-to-zoom) на тачпаде эмулируется как wheel + Ctrl.
-		if (event.ctrlKey) {
-			this.handleZoom(event.deltaY)
-		} else {
-			// Для событий без Ctrl, различаем панорамирование на тачпаде и зум колесом мыши.
-			// Тачпады обычно используют DOM_DELTA_PIXEL, мыши — DOM_DELTA_LINE.
-			if (event.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
-				this.handlePan(event.deltaX, event.deltaY)
-			} else {
-				this.handleZoom(event.deltaY)
-			}
-		}
+		this.handleZoom(event.deltaY)
 		this.update()
 	}
 
@@ -182,12 +181,9 @@ export class ViewPoint {
 	 * @param deltaY Смещение по вертикали.
 	 */
 	private handleRotation(deltaX: number, deltaY: number) {
-		// Коэффициент 0.005 подобран для комфортной скорости вращения.
-		this.theta -= deltaX * 0.005
-		this.phi -= deltaY * 0.005
-
-		// Ограничиваем угол phi, чтобы избежать "кувырка" камеры через полюса.
-		// 0.1 — небольшой отступ от полного вертикального положения.
+		const rotationSpeed = 0.005
+		this.theta -= deltaX * rotationSpeed
+		this.phi -= deltaY * rotationSpeed
 		this.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.phi))
 	}
 
@@ -197,24 +193,12 @@ export class ViewPoint {
 	 * @param deltaY Смещение по вертикали.
 	 */
 	private handlePan(deltaX: number, deltaY: number) {
-		// Скорость панорамирования зависит от радиуса, чтобы движение ощущалось
-		// одинаково быстрым независимо от отдаления от объекта.
+		// Скорость панорамирования зависит от расстояния до цели
 		const panSpeed = 0.001 * this.radius
-		const panOffset = vec3.create()
-
-		// Получаем векторы "вправо" и "вверх" из текущей матрицы вида.
-		// Это позволяет перемещаться в плоскости, перпендикулярной взгляду.
-		const right = vec3.fromValues(this.viewMatrix[0], this.viewMatrix[4], this.viewMatrix[8])
-		const up = vec3.fromValues(this.viewMatrix[1], this.viewMatrix[5], this.viewMatrix[9])
-
-		// Смещаем цель в том же направлении, что и движение мыши/пальца,
-		// создавая эффект "перемещения точки наблюдения".
-		vec3.scale(right, right, deltaX * panSpeed)
-		vec3.scale(up, up, -deltaY * panSpeed)
-
-		vec3.add(panOffset, panOffset, right)
-		vec3.add(panOffset, panOffset, up)
-		vec3.add(this.target, this.target, panOffset)
+		const me = this.viewMatrix.elements
+		const right = new Vector3(me[0], me[4], me[8]).multiplyScalar(-deltaX * panSpeed)
+		const up = new Vector3(me[1], me[5], me[9]).multiplyScalar(deltaY * panSpeed)
+		this.target.add(right).add(up)
 	}
 
 	/**
@@ -222,8 +206,9 @@ export class ViewPoint {
 	 * @param deltaY Значение прокрутки по оси Y.
 	 */
 	private handleZoom(deltaY: number) {
-		// Коэффициент 0.01 подобран для комфортной скорости масштабирования.
-		this.radius += deltaY * 0.01
+		// Используем Math.pow для плавного и пропорционального масштабирования
+		const scale = Math.pow(0.95, deltaY * 0.02)
+		this.radius *= scale
 		// Ограничиваем минимальный радиус, чтобы камера не "влетела" внутрь цели.
 		this.radius = Math.max(0.5, this.radius)
 	}
