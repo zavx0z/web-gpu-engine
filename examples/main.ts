@@ -59,6 +59,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 	const gltf = await loader.load(
 		"https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/2CylinderEngine/glTF/2CylinderEngine.gltf"
 	)
+	gltf.scene.position.set(0, 180, 0)
+	gltf.scene.updateMatrix()
 	scene.add(gltf.scene)
 	// --- Конец загрузки ---
 
