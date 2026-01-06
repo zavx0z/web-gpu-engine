@@ -1,3 +1,5 @@
+import { Vector3 } from '../math/Vector3'
+
 /**
  * Типы TypedArray, которые можно использовать в BufferAttribute.
  */
@@ -64,5 +66,75 @@ export class BufferGeometry {
 	public setIndex(index: BufferAttribute): this {
 		this.index = index
 		return this
+	}
+
+	/**
+	 * Вычисляет нормали для вершин на основе граней геометрии.
+	 * Предполагает, что геометрия индексирована и состоит из треугольников.
+	 */
+	public computeVertexNormals(): void {
+		const index = this.index
+		const positionAttribute = this.attributes.position
+
+		if (!positionAttribute) {
+			console.error("BufferGeometry.computeVertexNormals(): отсутствует атрибут 'position'.")
+			return
+		}
+
+		const normalAttribute = new BufferAttribute(new Float32Array(positionAttribute.count * 3), 3)
+
+		const pA = new Vector3(), pB = new Vector3(), pC = new Vector3()
+		const cb = new Vector3(), ab = new Vector3()
+
+		if (!index) {
+			console.error("BufferGeometry.computeVertexNormals(): поддерживается только индексированная геометрия.")
+			return
+		}
+
+		const indices = index.array
+		const positions = positionAttribute.array
+		const normals = normalAttribute.array
+
+		for (let i = 0, il = index.count; i < il; i += 3) {
+			const vA = indices[i + 0]
+			const vB = indices[i + 1]
+			const vC = indices[i + 2]
+
+			pA.fromArray(positions, vA * 3)
+			pB.fromArray(positions, vB * 3)
+			pC.fromArray(positions, vC * 3)
+
+			cb.subVectors(pC, pB)
+			ab.subVectors(pA, pB)
+			cb.cross(ab)
+
+			normals[vA * 3] += cb.x
+			normals[vA * 3 + 1] += cb.y
+			normals[vA * 3 + 2] += cb.z
+
+			normals[vB * 3] += cb.x
+			normals[vB * 3 + 1] += cb.y
+			normals[vB * 3 + 2] += cb.z
+
+			normals[vC * 3] += cb.x
+			normals[vC * 3 + 1] += cb.y
+			normals[vC * 3 + 2] += cb.z
+		}
+
+		this.normalizeNormals()
+		this.attributes.normal = normalAttribute
+	}
+
+	private normalizeNormals(): void {
+		const normals = this.attributes.normal.array
+		const tempNormal = new Vector3()
+
+		for (let i = 0, il = this.attributes.normal.count; i < il; i++) {
+			tempNormal.fromArray(normals, i * 3)
+			tempNormal.normalize()
+			normals[i * 3 + 0] = tempNormal.x
+			normals[i * 3 + 1] = tempNormal.y
+			normals[i * 3 + 2] = tempNormal.z
+		}
 	}
 }

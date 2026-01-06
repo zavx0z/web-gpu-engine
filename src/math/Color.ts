@@ -26,12 +26,14 @@ export class Color {
 
 	/**
 	 * Создает экземпляр Color.
-	 * @param r - Значение красного (0-1), или шестнадцатеричное значение цвета.
+	 * @param r - Значение красного (0-1), шестнадцатеричное значение, или другой экземпляр Color.
 	 * @param g - Значение зеленого (0-1).
 	 * @param b - Значение синего (0-1).
 	 */
-	constructor(r?: number, g?: number, b?: number) {
-		if (g === undefined && b === undefined) {
+	constructor(r?: number | Color, g?: number, b?: number) {
+		if (r instanceof Color) {
+			this.copy(r)
+		} else if (g === undefined && b === undefined) {
 			this.setHex(r ?? 0xffffff)
 		} else {
 			this.setRGB(r as number, g!, b!)

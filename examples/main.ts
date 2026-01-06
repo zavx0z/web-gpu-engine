@@ -9,6 +9,7 @@ import {
 	WebGPURenderer,
 	GLTFLoader,
 	GridHelper,
+	Light,
 } from "../src/WebGPUEngine"
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -37,6 +38,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 	const grid = new GridHelper(1000, 20)
 	scene.add(grid)
+
+	// --- Добавляем источник света ---
+	const light = new Light(new Color(1, 1, 1), 1)
+	light.position.set(1113, 1113, 1113)
+	light.updateMatrix()
+	scene.add(light)
+	// --- Конец добавления источника света ---
 
 	// --- Обработчик изменения размера окна ---
 	window.addEventListener("resize", () => {

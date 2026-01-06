@@ -1,4 +1,5 @@
 import { Quaternion } from "./Quaternion"
+import { Matrix4 } from "./Matrix4"
 
 /**
  * Класс для представления 3D-векторов.
@@ -113,6 +114,15 @@ export class Vector3 {
 	}
 
 	/**
+	 * Устанавливает этот вектор как векторное произведение this и v.
+	 * @param v Другой вектор.
+	 * @returns {this}
+	 */
+	public cross(v: Vector3): this {
+		return this.crossVectors(this, v)
+	}
+
+	/**
 	 * Устанавливает этот вектор как векторное произведение векторов a и b.
 	 * @param {Vector3} a - Первый вектор.
 	 * @param {Vector3} b - Второй вектор.
@@ -147,11 +157,29 @@ export class Vector3 {
 	}
 
 	/**
-	 * Возвращает компоненты вектора в виде массива.
-	 * @returns {[number, number, number]} Массив [x, y, z].
+	 * Устанавливает компоненты вектора из массива.
+	 * @param array Массив с компонентами.
+	 * @param offset Смещение в массиве.
+	 * @returns {this}
 	 */
-	public toArray(): [number, number, number] {
-		return [this.x, this.y, this.z]
+	public fromArray(array: ArrayLike<number>, offset: number = 0): this {
+		this.x = array[offset]
+		this.y = array[offset + 1]
+		this.z = array[offset + 2]
+		return this
+	}
+
+	/**
+	 * Записывает компоненты вектора в массив.
+	 * @param array Массив для записи.
+	 * @param offset Смещение в массиве.
+	 * @returns Массив с компонентами.
+	 */
+	public toArray(array: number[] = [], offset: number = 0): number[] {
+		array[offset] = this.x
+		array[offset + 1] = this.y
+		array[offset + 2] = this.z
+		return array
 	}
 
 	/**
@@ -182,6 +210,19 @@ export class Vector3 {
 		this.x = -this.x
 		this.y = -this.y
 		this.z = -this.z
+		return this
+	}
+
+	public applyMatrix4(m: Matrix4): this {
+		const x = this.x, y = this.y, z = this.z
+		const e = m.elements
+
+		const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15])
+
+		this.x = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w
+		this.y = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w
+		this.z = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w
+
 		return this
 	}
 }

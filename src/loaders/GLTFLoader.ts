@@ -2,8 +2,9 @@ import { Object3D } from "../core/Object3D"
 import { Scene } from "../scenes/Scene"
 import { Mesh } from "../core/Mesh"
 import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
-import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
+import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Color } from "../math/Color"
+import { Matrix4 } from "../math/Matrix4"
 
 // Определение интерфейсов для структуры glTF
 interface GLTF {
@@ -117,8 +118,8 @@ export class GLTFLoader {
 		return Promise.all(promises)
 	}
 
-	private parseMaterials(gltf: GLTF): MeshBasicMaterial[] {
-		const materials: MeshBasicMaterial[] = []
+	private parseMaterials(gltf: GLTF): MeshLambertMaterial[] {
+		const materials: MeshLambertMaterial[] = []
 		if (gltf.materials) {
 			for (const mat of gltf.materials) {
 				let color
@@ -126,7 +127,7 @@ export class GLTFLoader {
 					const [r, g, b] = mat.pbrMetallicRoughness.baseColorFactor
 					color = new Color(r, g, b)
 				}
-				materials.push(new MeshBasicMaterial({ color }))
+				materials.push(new MeshLambertMaterial({ color }))
 			}
 		}
 		return materials
@@ -136,14 +137,14 @@ export class GLTFLoader {
 		gltf: GLTF,
 		nodeIndex: number,
 		buffers: ArrayBuffer[],
-		materials: MeshBasicMaterial[]
+		materials: MeshLambertMaterial[]
 	): Object3D | null {
 		const nodeDef = gltf.nodes![nodeIndex]
 		const node = new Object3D()
 
 		// Установка трансформации
 		if (nodeDef.matrix) {
-			node.modelMatrix.elements = nodeDef.matrix
+			node.modelMatrix.elements.set(nodeDef.matrix)
 		} else {
 			if (nodeDef.translation) {
 				node.position.x = nodeDef.translation[0]
@@ -168,7 +169,7 @@ export class GLTFLoader {
 			const meshDef = gltf.meshes![nodeDef.mesh]
 			for (const primitive of meshDef.primitives) {
 				const geometry = this.parseGeometry(gltf, primitive, buffers)
-				const material = primitive.material !== undefined ? materials[primitive.material] : new MeshBasicMaterial()
+				const material = primitive.material !== undefined ? materials[primitive.material] : new MeshLambertMaterial()
 				const mesh = new Mesh(geometry, material)
 				node.add(mesh)
 			}
@@ -206,6 +207,23 @@ export class GLTFLoader {
 					count * itemSize
 				)
 				geometry.setAttribute("position", new BufferAttribute(array, itemSize))
+			} else if (attributeName === "NORMAL") {
+				const accessor = gltf.accessors![accessorIndex]
+				const bufferView = gltf.bufferViews![accessor.bufferView!]
+				const buffer = buffers[bufferView.buffer]
+				const componentType = accessor.componentType
+				const type = accessor.type
+				const count = accessor.count
+
+				const TypedArray = this.getTypedArray(componentType)
+				const itemSize = this.getItemSize(type)
+
+				const array = new TypedArray(
+					buffer,
+					(bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
+					count * itemSize
+				)
+				geometry.setAttribute("normal", new BufferAttribute(array, itemSize))
 			}
 		}
 
@@ -224,6 +242,12 @@ export class GLTFLoader {
 			)
 			geometry.setIndex(new BufferAttribute(array, 1))
 		}
+		// Если в glTF нет нормалей, и нет индексов, мы не можем их сгенерировать
+		// Но если есть индексы, то можно попробовать
+		else if (geometry.index) {
+			geometry.computeVertexNormals()
+		}
+
 		return geometry
 	}
 
