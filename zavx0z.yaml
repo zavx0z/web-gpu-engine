@@ -13,3 +13,6 @@ exclude:
   - .firebaserc
   - bun.lock
   - firebase.json
+  - typedoc.json
+  - .gitignore
+  - .DS_Store

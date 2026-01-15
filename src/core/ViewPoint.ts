@@ -30,7 +30,7 @@ export class ViewPoint {
 
 	private element: HTMLElement
 	private target: Vector3
-	private up: Vector3 = new Vector3(0, 1, 0)
+	private up: Vector3 = new Vector3(0, 0, 1)
 
 	// Состояние ввода
 	private isRotating = false
@@ -52,7 +52,7 @@ export class ViewPoint {
 		this.aspect = this.element.clientWidth / this.element.clientHeight
 
 		this.target = parameters.target ? new Vector3(parameters.target.x, parameters.target.y, parameters.target.z) : new Vector3(0, 0, 0)
-		this.position = parameters.position ? new Vector3(parameters.position.x, parameters.position.y, parameters.position.z) : new Vector3(0, 0, 10)
+		this.position = parameters.position ? new Vector3(parameters.position.x, parameters.position.y, parameters.position.z) : new Vector3(10, -10, 10)
 
 		this.updateProjectionMatrix()
 		this.attachEventListeners()
@@ -247,9 +247,9 @@ export class ViewPoint {
 		const rotationSpeed = 0.005
 		const offset = new Vector3().subVectors(this.position, this.target)
 
-		// Вращение по горизонтали (вокруг оси Y мира) с коррекцией инверсии
-		const horizontalAngle = this.up.y < 0 ? deltaX * rotationSpeed : -deltaX * rotationSpeed
-		const quatX = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), horizontalAngle)
+		// Вращение по горизонтали (вокруг оси Z мира) с коррекцией инверсии
+		const horizontalAngle = this.up.z < 0 ? deltaX * rotationSpeed : -deltaX * rotationSpeed
+		const quatX = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), horizontalAngle)
 		offset.applyQuaternion(quatX)
 		this.up.applyQuaternion(quatX)
 

@@ -24,7 +24,7 @@ export class DirectionalLight extends Light {
 		super(color, intensity)
 
 		this.target = new Object3D()
-		// По умолчанию свет направлен из (0, 1, 0) в (0, 0, 0)
-		this.position.set(0, 1, 0)
+		// По умолчанию свет направлен из (0, 0, 1) в (0, 0, 0)
+		this.position.set(0, 0, 1)
 	}
 }

@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 	const viewPoint = new ViewPoint({
 		element: renderer.canvas,
 		fov: (2 * Math.PI) / 5,
-		position: { x: 0, y: 800, z: 1000 },
+		position: { x: 1000, y: -1000, z: 800 },
 		near: 0.1,
 		far: 10000,
 	})
@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 	const gltf = await loader.load(
 		"https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/2CylinderEngine/glTF/2CylinderEngine.gltf"
 	)
-	gltf.scene.position.set(0, 180, 0)
+	gltf.scene.position.set(0, 0, 180)
 	gltf.scene.updateMatrix()
 	scene.add(gltf.scene)
 	// --- Конец загрузки ---

@@ -1,5 +1,6 @@
 import { Object3D } from "../core/Object3D"
 import { Scene } from "../scenes/Scene"
+import { Vector3 } from "../math/Vector3"
 import { Mesh } from "../core/Mesh"
 import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
@@ -84,14 +85,21 @@ export class GLTFLoader {
 
 		const buffers = await this.loadBuffers(gltf, baseUri)
 		const materials = this.parseMaterials(gltf)
-
 		const scene = new Scene()
+
+		// Создаем контейнер-враппер для автоматической коррекции осей.
+		// Поворачиваем на 90 градусов по X, чтобы перевести Y-up в Z-up.
+		const modelWrapper = new Object3D()
+		modelWrapper.rotation = new Vector3(Math.PI / 2, 0, 0)
+		modelWrapper.updateMatrix()
+		scene.add(modelWrapper)
+
 		if (gltf.scene !== undefined && gltf.scenes) {
 			const sceneDef = gltf.scenes[gltf.scene]
 			for (const nodeIndex of sceneDef.nodes) {
 				const node = this.parseNode(gltf, nodeIndex, buffers, materials)
 				if (node) {
-					scene.add(node)
+					modelWrapper.add(node)
 				}
 			}
 		}

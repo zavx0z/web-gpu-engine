@@ -29,12 +29,12 @@ export class GridHelper extends LineSegments {
             const isCenter = i === center
 			const color = isCenter ? color1 : color2
 
-            // Линии, параллельные оси Z
-            vertices.push(-halfSize, 0, i * step - halfSize, halfSize, 0, i * step - halfSize)
+            // Линии, параллельные оси Y (XY плоскость, Z=0)
+            vertices.push(i * step - halfSize, -halfSize, 0, i * step - halfSize, halfSize, 0)
             colors.push(color.r, color.g, color.b, color.r, color.g, color.b)
 
-            // Линии, параллельные оси X
-            vertices.push(i * step - halfSize, 0, -halfSize, i * step - halfSize, 0, halfSize)
+            // Линии, параллельные оси X (XY плоскость, Z=0)
+            vertices.push(-halfSize, i * step - halfSize, 0, halfSize, i * step - halfSize, 0)
             colors.push(color.r, color.g, color.b, color.r, color.g, color.b)
 		}
 
