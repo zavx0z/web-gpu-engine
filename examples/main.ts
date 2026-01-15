@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		return
 	}
 
+	renderer.setPixelRatio(window.devicePixelRatio)
 	// Устанавливаем начальный размер
 	renderer.setSize(window.innerWidth, window.innerHeight)
 	document.body.appendChild(renderer.canvas)

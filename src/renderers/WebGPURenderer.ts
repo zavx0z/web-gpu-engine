@@ -70,6 +70,7 @@ export class WebGPURenderer {
   private depthTexture: GPUTexture | null = null;
   private multisampleTexture: GPUTexture | null = null;
   private sampleCount = 4; // MSAA
+  private pixelRatio = 1;
 
   public canvas: HTMLCanvasElement | null = null;
 
@@ -183,7 +184,7 @@ export class WebGPURenderer {
         entryPoint: "fs_main",
         targets: [{ format: this.presentationFormat }],
       },
-      primitive: { topology: "triangle-list" },
+      primitive: { topology: "triangle-list", cullMode: "back" },
       depthStencil: {
         depthWriteEnabled: true,
         depthCompare: "less",
@@ -227,10 +228,14 @@ export class WebGPURenderer {
     });
   }
 
+  public setPixelRatio(value: number): void {
+    this.pixelRatio = value;
+  }
+
   public setSize(width: number, height: number): void {
     if (this.canvas) {
-      this.canvas.width = width;
-      this.canvas.height = height;
+      this.canvas.width = Math.floor(width * this.pixelRatio);
+      this.canvas.height = Math.floor(height * this.pixelRatio);
     }
   }
 
