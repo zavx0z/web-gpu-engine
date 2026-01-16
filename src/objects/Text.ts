@@ -50,7 +50,7 @@ function outlineToPolylineTTF(o: { points: Float32Array; onCurve: Uint8Array; co
   let start = 0
   for (let ci = 0; ci < ends.length; ci++) {
     const end = ends[ci]!
-    if (end === 0) continue
+    if (end < start) continue; // Skip empty or invalid contours
     const contourStartIndex = outPts.length / 2
     const count = end - start + 1
     const get = (i: number): Point => {
@@ -105,6 +105,8 @@ export class Text extends Object3D {
   public stencilGeometry: BufferGeometry = new BufferGeometry()
   public coverGeometry: BufferGeometry = new BufferGeometry()
 
+  private static geometryCache: Map<number, { stencil: BufferGeometry, cover: BufferGeometry }> = new Map();
+
   constructor(text: string, font: TrueTypeFont, fontSize: number = 10, color: number | Color = 0xffffff) {
     super()
     this.text = text
@@ -120,48 +122,86 @@ export class Text extends Object3D {
     const allStencilIndices: number[] = []
     const allCoverVerts: number[] = []
     const allCoverIndices: number[] = []
+
     let penX = 0
     const scale = this.fontSize / this.font.unitsPerEm
+
     for (const char of this.text) {
       if (char === ' ') {
         penX += this.font.unitsPerEm * 0.3 * scale
         continue
       }
+
       const gid = this.font.mapCharToGlyph(char.codePointAt(0)!)
-      const outline = this.font.getGlyphOutline(gid)
-      const poly = outlineToPolylineTTF(outline)
-      if (poly.points.length === 0) continue
-      const currentVertexOffset = allStencilVerts.length / 3
-      for (let i = 0; i < poly.points.length; i += 2) {
-        const x = poly.points[i] * scale + penX
-        const y = poly.points[i + 1] * scale
-        allStencilVerts.push(x, y, 0)
+      let cachedGeo = Text.geometryCache.get(gid);
+
+      if (!cachedGeo) {
+        const outline = this.font.getGlyphOutline(gid)
+        const poly = outlineToPolylineTTF(outline)
+
+        const stencilGeo = new BufferGeometry();
+        const coverGeo = new BufferGeometry();
+
+        if (poly.points.length > 0) {
+            const stencilIndices = makeFanIndices(poly.contours, 0);
+            stencilGeo.setAttribute('position', new BufferAttribute(poly.points, 2)); // Use 2D points directly
+            stencilGeo.setIndex(new BufferAttribute(stencilIndices, 1));
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (let i = 0; i < poly.points.length; i += 2) {
+                const x = poly.points[i];
+                const y = poly.points[i + 1];
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+
+            const pad = this.fontSize * 0.1 / scale; // Convert pad to font units
+            minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+
+            const coverVerts = new Float32Array([minX, minY, maxX, minY, minX, maxY, maxX, maxY]);
+            const coverIndices = new Uint32Array([0, 1, 2, 2, 1, 3]);
+            coverGeo.setAttribute('position', new BufferAttribute(coverVerts, 2));
+            coverGeo.setIndex(new BufferAttribute(coverIndices, 1));
+        }
+        
+        cachedGeo = { stencil: stencilGeo, cover: coverGeo };
+        Text.geometryCache.set(gid, cachedGeo);
       }
-      const indices = makeFanIndices(poly.contours, currentVertexOffset)
-      for(let i=0; i<indices.length; i++) allStencilIndices.push(indices[i])
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (let i = 0; i < poly.points.length; i += 2) {
-         const x = poly.points[i] * scale + penX
-         const y = poly.points[i + 1] * scale
-         if (x < minX) minX = x
-         if (y < minY) minY = y
-         if (x > maxX) maxX = x
-         if (y > maxY) maxY = y
+
+      const currentStencilVertexOffset = allStencilVerts.length / 3;
+      const stencilPos = cachedGeo.stencil.attributes.position?.array as Float32Array;
+      if (stencilPos) {
+        for (let i = 0; i < stencilPos.length; i += 2) {
+            allStencilVerts.push((stencilPos[i] * scale) + penX, stencilPos[i+1] * scale, 0);
+        }
+        const stencilIndices = cachedGeo.stencil.index?.array as Uint32Array;
+        if (stencilIndices) {
+            for (let i = 0; i < stencilIndices.length; i++) {
+                allStencilIndices.push(stencilIndices[i] + currentStencilVertexOffset);
+            }
+        }
       }
-      const pad = this.fontSize * 0.1
-      minX -= pad; minY -= pad; maxX += pad; maxY += pad;
-      const coverOffset = allCoverVerts.length / 3
-      allCoverVerts.push(minX, minY, 0)
-      allCoverVerts.push(maxX, minY, 0)
-      allCoverVerts.push(minX, maxY, 0)
-      allCoverVerts.push(maxX, maxY, 0)
-      allCoverIndices.push(
-        coverOffset + 0, coverOffset + 1, coverOffset + 2,
-        coverOffset + 2, coverOffset + 1, coverOffset + 3
-      )
+
+      const currentCoverVertexOffset = allCoverVerts.length / 3;
+      const coverPos = cachedGeo.cover.attributes.position?.array as Float32Array;
+      if (coverPos) {
+        for (let i = 0; i < coverPos.length; i += 2) {
+            allCoverVerts.push((coverPos[i] * scale) + penX, coverPos[i+1] * scale, 0);
+        }
+        const coverIndices = cachedGeo.cover.index?.array as Uint32Array;
+        if (coverIndices) {
+            for (let i = 0; i < coverIndices.length; i++) {
+                allCoverIndices.push(coverIndices[i] + currentCoverVertexOffset);
+            }
+        }
+      }
+
       const metric = this.font.getHMetric(gid)
       penX += metric.advanceWidth * scale + this.letterSpacing
     }
+
     this.stencilGeometry.setAttribute('position', new BufferAttribute(new Float32Array(allStencilVerts), 3))
     this.stencilGeometry.setIndex(new BufferAttribute(new Uint32Array(allStencilIndices), 1))
     this.coverGeometry.setAttribute('position', new BufferAttribute(new Float32Array(allCoverVerts), 3))
