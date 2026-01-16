@@ -1,7 +1,8 @@
 import { Object3D } from "../core/Object3D"
 import { BufferGeometry, BufferAttribute } from "../core/BufferGeometry"
 import { TrueTypeFont } from "../text/TrueTypeFont"
-import { Color } from "../math/Color"
+import { TextMaterial } from "../materials/TextMaterial";
+import { Color } from "../math/Color";
 
 type Point = { x: number; y: number; on: boolean }
 
@@ -99,7 +100,7 @@ export class Text extends Object3D {
   public type = "Text"
   public text: string
   public font: TrueTypeFont
-  public color: Color
+  public material: TextMaterial;
   public fontSize: number
   public letterSpacing: number
   public stencilGeometry: BufferGeometry = new BufferGeometry()
@@ -107,12 +108,12 @@ export class Text extends Object3D {
 
   private static geometryCache: Map<number, { stencil: BufferGeometry, cover: BufferGeometry }> = new Map();
 
-  constructor(text: string, font: TrueTypeFont, fontSize: number = 10, color: number | Color = 0xffffff) {
+    constructor(text: string, font: TrueTypeFont, fontSize: number = 10, material: TextMaterial) {
     super()
     this.text = text
     this.font = font
     this.fontSize = fontSize
-    this.color = new Color(color)
+    this.material = material;
     this.letterSpacing = fontSize * 0.05
     this.updateGeometry()
   }

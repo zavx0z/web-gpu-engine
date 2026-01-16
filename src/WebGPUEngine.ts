@@ -11,4 +11,5 @@ export * from "./math/Color"
 export * from "./helpers/GridHelper"
 export * from "./lights/Light"
 export * from "./text/TrueTypeFont"
-export * from "./objects/Text"
+export * from "./objects/Text";
+export * from "./materials/TextMaterial";

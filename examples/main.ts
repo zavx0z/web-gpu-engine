@@ -12,7 +12,8 @@ import {
 	Light,
 	Text,
 	TrueTypeFont,
-} from "../src/WebGPUEngine"
+	TextMaterial,
+} from "../src/WebGPUEngine";
 
 document.addEventListener("DOMContentLoaded", async () => {
 	const renderer = new WebGPURenderer()
@@ -77,7 +78,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 		const font = await TrueTypeFont.fromUrl(fontUrl)
 		console.log("Шрифт загружен.")
 
-		const text = new Text("WebGPU Engine", font, 150, new Color(1.0, 0.0, 0.0))
+		const text = new Text("WebGPU Engine", font, 150, new TextMaterial({ color: new Color(1.0, 0.0, 0.0) }));
 		
 		// В Z-up системе (Blender style):
 		// Ось Z смотрит вверх. Ось Y смотрит "от нас" (или "к нам", зависит от реализации).
