@@ -2,7 +2,6 @@ import { Object3D } from "../core/Object3D"
 import { BufferGeometry, BufferAttribute } from "../core/BufferGeometry"
 import { TrueTypeFont } from "../text/TrueTypeFont"
 import { TextMaterial } from "../materials/TextMaterial";
-import { Color } from "../math/Color";
 
 type Point = { x: number; y: number; on: boolean }
 
@@ -100,7 +99,7 @@ export class Text extends Object3D {
   public type = "Text"
   public text: string
   public font: TrueTypeFont
-  public material: TextMaterial;
+  public material: TextMaterial
   public fontSize: number
   public letterSpacing: number
   public stencilGeometry: BufferGeometry = new BufferGeometry()
@@ -108,7 +107,7 @@ export class Text extends Object3D {
 
   private static geometryCache: Map<number, { stencil: BufferGeometry, cover: BufferGeometry }> = new Map();
 
-    constructor(text: string, font: TrueTypeFont, fontSize: number = 10, material: TextMaterial) {
+  constructor(text: string, font: TrueTypeFont, fontSize: number = 10, material: TextMaterial) {
     super()
     this.text = text
     this.font = font
@@ -158,8 +157,8 @@ export class Text extends Object3D {
                 if (y > maxY) maxY = y;
             }
 
-            const pad = this.fontSize * 0.1 / scale; // Convert pad to font units
-            minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+            const pad_fu = this.font.unitsPerEm * 0.1; // Padding in font units
+            minX -= pad_fu; minY -= pad_fu; maxX += pad_fu; maxY += pad_fu;
 
             const coverVerts = new Float32Array([minX, minY, maxX, minY, minX, maxY, maxX, maxY]);
             const coverIndices = new Uint32Array([0, 1, 2, 2, 1, 3]);
