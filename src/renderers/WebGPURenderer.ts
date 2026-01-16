@@ -16,6 +16,7 @@ import { TextMaterial } from "../materials/TextMaterial";
 import meshShaderCode from "./shaders/mesh.wgsl" with { type: "text" }
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
 import textShaderCode from "./shaders/text.wgsl" with { type: "text" }
+import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
 
 // --- Константы для uniform-буферов ---
 const UNIFORM_ALIGNMENT = 256
@@ -37,16 +38,7 @@ interface GeometryBuffers {
   colorBuffer?: GPUBuffer
 }
 
-interface RenderItem {
-  type: "mesh" | "line" | "text-stencil" | "text-cover"
-  object: Mesh | LineSegments | Text
-  worldMatrix: Matrix4
-}
 
-interface LightItem {
-  light: Light
-  worldMatrix: Matrix4
-}
 
 export class WebGPURenderer {
   private device: GPUDevice | null = null
@@ -336,7 +328,7 @@ export class WebGPURenderer {
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
 
-    this.collectSceneObjects(scene, new Matrix4(), renderList, lightList)
+    collectSceneObjects(scene, new Matrix4(), renderList, lightList)
 
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
 
@@ -405,29 +397,7 @@ export class WebGPURenderer {
     this.device.queue.submit([commandEncoder.finish()])
   }
 
-  private collectSceneObjects(
-    object: Object3D,
-    parentWorldMatrix: Matrix4,
-    renderList: RenderItem[],
-    lights: LightItem[]
-  ): void {
-    if (!object.visible) return
 
-    const worldMatrix = new Matrix4().multiplyMatrices(parentWorldMatrix, object.modelMatrix)
-
-    if (object instanceof Mesh) {
-      renderList.push({ type: "mesh", object, worldMatrix })
-    } else if (object instanceof LineSegments) {
-      renderList.push({ type: "line", object, worldMatrix })
-    } else if (object instanceof Text) {
-      renderList.push({ type: "text-stencil", object, worldMatrix })
-      renderList.push({ type: "text-cover", object, worldMatrix })
-    } else if (object instanceof Light) lights.push({ light: object, worldMatrix })
-
-    for (const child of object.children) {
-      this.collectSceneObjects(child, worldMatrix, renderList, lights)
-    }
-  }
 
   private updateSceneUniforms(lights: LightItem[], viewMatrix: Matrix4): void {
     if (!this.device || !this.sceneUniformBuffer) return
