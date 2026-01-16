@@ -343,47 +343,74 @@ export class WebGPURenderer {
 
     passEncoder.setBindGroup(0, this.globalBindGroup!);
 
-    // 1. Render Meshes
-    passEncoder.setPipeline(this.meshPipeline);
+    // --- Категоризация объектов для оптимизации рендеринга ---
+    const meshItems: { item: RenderItem; index: number }[] = [];
+    const lineItems: { item: RenderItem; index: number }[] = [];
+    const textItems: { item: RenderItem; index: number }[] = [];
+
     for (let i = 0; i < renderList.length; i++) {
-      if (renderList[i].type === "mesh")
-        this.renderMesh(
-          passEncoder,
-          renderList[i].object as Mesh,
-          renderList[i].worldMatrix,
-          i
-        );
+      const item = renderList[i];
+      switch (item.type) {
+        case "mesh":
+          meshItems.push({ item, index: i });
+          break;
+        case "line":
+          lineItems.push({ item, index: i });
+          break;
+        case "text":
+          textItems.push({ item, index: i });
+          break;
+      }
     }
 
-    // 2. Render Lines
-    passEncoder.setPipeline(this.linePipeline);
-    for (let i = 0; i < renderList.length; i++) {
-      if (renderList[i].type === "line")
+    // 1. Рендеринг мешей
+    if (meshItems.length > 0) {
+      passEncoder.setPipeline(this.meshPipeline!);
+      for (const { item, index } of meshItems) {
+        this.renderMesh(passEncoder, item.object as Mesh, item.worldMatrix, index);
+      }
+    }
+
+    // 2. Рендеринг линий
+    if (lineItems.length > 0) {
+      passEncoder.setPipeline(this.linePipeline!);
+      for (const { item, index } of lineItems) {
         this.renderLines(
           passEncoder,
-          renderList[i].object as LineSegments,
-          renderList[i].worldMatrix,
-          i
+          item.object as LineSegments,
+          item.worldMatrix,
+          index
         );
+      }
     }
 
-    // 3. Render Text (2 Passes)
-    if (this.textStencilPipeline && this.textCoverPipeline) {
-        passEncoder.setPipeline(this.textStencilPipeline);
-        passEncoder.setStencilReference(0);
-        for (let i = 0; i < renderList.length; i++) {
-            if (renderList[i].type === "text") {
-                 this.renderTextPass(passEncoder, renderList[i].object as Text, renderList[i].worldMatrix, i, true);
-            }
-        }
+    // 3. Рендеринг текста (2 прохода)
+    if (textItems.length > 0 && this.textStencilPipeline && this.textCoverPipeline) {
+      // Проход 1: Запись в трафаретный буфер
+      passEncoder.setPipeline(this.textStencilPipeline);
+      passEncoder.setStencilReference(0);
+      for (const { item, index } of textItems) {
+        this.renderTextPass(
+          passEncoder,
+          item.object as Text,
+          item.worldMatrix,
+          index,
+          true
+        );
+      }
 
-        passEncoder.setPipeline(this.textCoverPipeline);
-        passEncoder.setStencilReference(0);
-        for (let i = 0; i < renderList.length; i++) {
-             if (renderList[i].type === "text") {
-                 this.renderTextPass(passEncoder, renderList[i].object as Text, renderList[i].worldMatrix, i, false);
-             }
-        }
+      // Проход 2: Отрисовка с использованием трафарета
+      passEncoder.setPipeline(this.textCoverPipeline);
+      passEncoder.setStencilReference(0); // Ссылка та же, но операция в конвейере другая (not-equal)
+      for (const { item, index } of textItems) {
+        this.renderTextPass(
+          passEncoder,
+          item.object as Text,
+          item.worldMatrix,
+          index,
+          false
+        );
+      }
     }
 
     passEncoder.end();
