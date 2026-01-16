@@ -16,3 +16,4 @@ exclude:
   - typedoc.json
   - .gitignore
   - .DS_Store
+  - JetBrainsMono-Bold.ttf
