@@ -601,7 +601,7 @@ export class WebGPURenderer {
     const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
     objectData.set(worldMatrix.elements, 0)
     if (!isStencil) {
-objectData.set((text.material as TextMaterial).color.toArray(), 32);
+      objectData.set((text.material as TextMaterial).color.toArray(), 32)
     }
 
     this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
