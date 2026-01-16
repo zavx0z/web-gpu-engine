@@ -11,9 +11,6 @@
     "deploy:app": "echo 'Deploying app... Instruction for Gemini AI.'",
     "deploy:docs": "echo 'Deploying docs... Instruction for Gemini AI.'"
   },
-  "workspaces": [
-    "pkgs/*"
-  ],
   "keywords": [
     "webgpu",
     "graphics",
