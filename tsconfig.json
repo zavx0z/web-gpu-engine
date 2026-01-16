@@ -18,5 +18,5 @@
     "types": ["@webgpu/types"]
   },
   // Включаем в проверку и движок, и примеры
-  "include": ["src", "examples", "hmr.d.ts"]
+  "include": ["src", "examples", "hmr.d.ts", "global.d.ts"]
 }
