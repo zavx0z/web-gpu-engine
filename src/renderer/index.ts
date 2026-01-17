@@ -39,9 +39,15 @@ interface GeometryBuffers {
   colorBuffer?: GPUBuffer
 }
 
-
-
-export class WebGPURenderer {
+/**
+ * Рендерер, использующий **WebGPU API** для отрисовки сцены.
+ *
+ * Основные особенности:
+ * * Полная поддержка **WebGPU** (не поддерживает WebGL).
+ * * Работает в пространстве отсечения с глубиной **[0, 1]**.
+ * * Автоматически управляет буферами uniform-ов и пайплайнами.
+ */
+export class Renderer {
   private device: GPUDevice | null = null
   private context: GPUCanvasContext | null = null
   private presentationFormat: GPUTextureFormat | null = null

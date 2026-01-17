@@ -3,7 +3,7 @@ import {
   Color,
   Scene,
   ViewPoint,
-  WebGPURenderer,
+  Renderer,
   GLTFLoader,
   GridHelper,
   Light,
@@ -13,7 +13,7 @@ import {
 } from "../src"
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const renderer = new WebGPURenderer()
+  const renderer = new Renderer()
   await renderer.init()
 
   if (!renderer.canvas) {
