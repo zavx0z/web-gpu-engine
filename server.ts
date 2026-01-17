@@ -11,7 +11,7 @@ Bun.serve({
   },
   routes: {
     "/": main,
-    "/JetBrainsMono-Bold.ttf": file("./src/text/JetBrainsMono-Bold.ttf"),
+    "/JetBrainsMono-Bold.ttf": file("./static/JetBrainsMono-Bold.ttf"),
     "/models/engine/2CylinderEngine.gltf": file("./static/models/engine/2CylinderEngine.gltf"),
     "/models/engine/2CylinderEngine0.bin": file("./static/models/engine/2CylinderEngine0.bin"),
     // "/gl-matrix.js": new Response(Bun.file("./gl-matrix.js"), {

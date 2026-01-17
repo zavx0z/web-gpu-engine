@@ -45,7 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- Добавляем источник света ---
   const light = new Light(new Color(1, 1, 1), 1)
-  light.position.set(1113, 1113, 1113)
+  light.position.set(1113, -1113, 1113)
   light.updateMatrix()
   scene.add(light)
   // --- Конец добавления источника света ---
@@ -71,7 +71,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- Добавляем 3D Текст ---
   try {
-    const font = await TrueTypeFont.fromUrl("/JetBrainsMono-Bold.ttf")
+    const font = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
     const text = new Text("WebGPU Engine", font, 150, new TextMaterial({ color: new Color(1.0, 0.0, 0.0) }))
 
     // В Z-up системе (Blender style):
@@ -82,7 +82,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     text.rotation.x = Math.PI / 2 // Поднимаем с пола (XY) в вертикаль (XZ)
 
     // Центрируем
-    text.position.set(-600, 0, 300)
+    text.position.set(-600, 0, 400)
     text.updateMatrix()
 
     scene.add(text)

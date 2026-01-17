@@ -5,7 +5,7 @@
   "main": "src/WebGPUEngine.js",
   "scripts": {
     "dev": "bun --hot server",
-    "build": "bun build ./index.html --outdir ./dist",
+    "build": "rm -rf dist && bun build ./index.html --outdir ./dist && cp -r ./static/* ./dist",
     "typecheck": "tsc --noEmit",
     "build:docs": "typedoc",
     "deploy:app": "echo 'Deploying app... Instruction for Gemini AI.'",

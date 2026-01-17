@@ -12,7 +12,7 @@
     enable = true;
     previews = {
       web = {
-        command = [ "bun" "run" "--hot" "serve.ts" ];
+        command = [ "bun" "run" "--hot" "server.ts" ];
         manager = "web";
         env = {
           PORT = "$PORT"; # Явно передаем переменную серверу
