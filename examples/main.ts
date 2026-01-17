@@ -64,6 +64,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const gltf = await loader.load("./models/engine/2CylinderEngine.gltf")
 
   gltf.scene.position.set(0, 0, 180)
+  gltf.scene.rotation.z = Math.PI
   gltf.scene.updateMatrix()
   scene.add(gltf.scene)
   // --- Конец загрузки ---

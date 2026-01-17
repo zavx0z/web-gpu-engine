@@ -22,17 +22,17 @@ export class Object3D {
 	// Внутреннее свойство для хранения вращения в углах Эйлера.
 	private _rotation: Vector3 = new Vector3()
 
-	/**
-	 * Вращение объекта в радианах в виде углов Эйлера {x, y, z}.
-	 * При изменении этого свойства автоматически обновляется `quaternion`.
-	 */
-	get rotation(): Vector3 {
-		return this._rotation
-	}
-	set rotation(value: Vector3) {
-		this._rotation = value
-		this.quaternion.setFromEuler(value.x, value.y, value.z)
-	}
+  /**
+   * Вращение объекта в радианах в виде углов Эйлера {x, y, z}.
+   * При изменении этого свойства автоматически обновляется `quaternion`.
+   */
+  get rotation(): Vector3 {
+    return this._rotation
+  }
+  set rotation(value: Vector3) {
+    this._rotation = value
+    this.quaternion.setFromEuler(value.x, value.y, value.z)
+  }
 
 	/**
 	 * Масштаб объекта в виде вектора {x, y, z}.
@@ -65,11 +65,12 @@ export class Object3D {
 		this.children.push(child)
 	}
 
-	/**
-	 * Обновляет локальную матрицу преобразования объекта
-	 * на основе его позиции, кватерниона и масштаба.
-	 */
-	public updateMatrix(): void {
-		this.modelMatrix.compose(this.position, this.quaternion, this.scale)
-	}
+  /**
+   * Обновляет локальную матрицу преобразования объекта
+   * на основе его позиции, кватерниона и масштаба.
+   */
+  public updateMatrix(): void {
+    this.quaternion.setFromEuler(this._rotation.x, this._rotation.y, this._rotation.z)
+    this.modelMatrix.compose(this.position, this.quaternion, this.scale)
+  }
 }
