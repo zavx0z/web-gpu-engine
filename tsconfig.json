@@ -15,8 +15,14 @@
     // Указываем, что корень проекта содержит и исходники, и примеры
     "rootDir": ".",
     // Подключаем типы WebGPU
-    "types": ["@webgpu/types"]
+    "types": [
+      "@webgpu/types"
+    ]
   },
   // Включаем в проверку и движок, и примеры
-  "include": ["src", "examples", "hmr.d.ts", "global.d.ts"]
+  "include": [
+    "src",
+    "examples",
+    "global.d.ts"
+  ]
 }
