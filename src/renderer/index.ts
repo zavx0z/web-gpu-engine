@@ -16,6 +16,7 @@ import { TextMaterial } from "../materials/TextMaterial";
 import meshShaderCode from "./shaders/mesh.wgsl" with { type: "text" }
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
 import textShaderCode from "./shaders/text.wgsl" with { type: "text" }
+
 import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
 
 // --- Константы для uniform-буферов ---

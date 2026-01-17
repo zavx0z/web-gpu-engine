@@ -4,7 +4,7 @@
   "description": "A lightweight WebGPU rendering engine inspired by three.js.",
   "main": "src/WebGPUEngine.js",
   "scripts": {
-    "dev": "bun --hot ./index.html",
+    "dev": "bun --hot server",
     "build": "bun build ./index.html --outdir ./dist",
     "typecheck": "tsc --noEmit",
     "build:docs": "typedoc",

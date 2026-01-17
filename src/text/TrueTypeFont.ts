@@ -26,7 +26,7 @@ export class TrueTypeFont {
   private _hmtx: { advance: Uint16Array; lsb: Int16Array } | null = null
   private pointsCache: Map<number, Outline> = new Map()
 
-  private constructor(buf: ArrayBuffer) {
+  constructor(buf: ArrayBuffer) {
     this.buf = buf
     this.dv = new DataView(buf)
     this.readTableDirectory()
@@ -152,7 +152,14 @@ export class TrueTypeFont {
   }
 
   private _cmap12: { sub: number; nGroups: number } | null = null
-  private _cmap4: { sub: number; segCount: number; endCode: number; startCode: number; idDelta: number; idRangeOff: number } | null = null
+  private _cmap4: {
+    sub: number
+    segCount: number
+    endCode: number
+    startCode: number
+    idDelta: number
+    idRangeOff: number
+  } | null = null
 
   private ensureCmap() {
     if (this._cmap12 || this._cmap4) return
@@ -183,7 +190,8 @@ export class TrueTypeFont {
     this.ensureCmap()
     if (this._cmap12) {
       const { sub, nGroups } = this._cmap12
-      let lo = 0, hi = nGroups - 1
+      let lo = 0,
+        hi = nGroups - 1
       while (lo <= hi) {
         const mid = (lo + hi) >>> 1
         const g = sub + 16 + mid * 12
@@ -197,7 +205,8 @@ export class TrueTypeFont {
     }
     if (this._cmap4) {
       const { segCount, endCode, startCode, idDelta, idRangeOff } = this._cmap4
-      let lo = 0, hi = segCount - 1
+      let lo = 0,
+        hi = segCount - 1
       while (lo <= hi) {
         const mid = (lo + hi) >>> 1
         const end = this.dv.getUint16(endCode + mid * 2, false)
@@ -322,7 +331,8 @@ export class TrueTypeFont {
       p += 2
       const compGid = this.dv.getUint16(p, false)
       p += 2
-      let arg1 = 0, arg2 = 0
+      let arg1 = 0,
+        arg2 = 0
       if ((flags & ARG_1_AND_2_ARE_WORDS) !== 0) {
         arg1 = this.dv.getInt16(p, false)
         p += 2
@@ -334,11 +344,15 @@ export class TrueTypeFont {
         arg2 = this.dv.getInt8(p)
         p += 1
       }
-      let a = 1, b = 0, c = 0, d = 1
+      let a = 1,
+        b = 0,
+        c = 0,
+        d = 1
       if ((flags & WE_HAVE_A_SCALE) !== 0) {
         const s = f2dot14ToFloat(this.dv.getInt16(p, false))
         p += 2
-        a = s; d = s
+        a = s
+        d = s
       } else if ((flags & WE_HAVE_AN_X_AND_Y_SCALE) !== 0) {
         a = f2dot14ToFloat(this.dv.getInt16(p, false))
         p += 2
@@ -358,22 +372,27 @@ export class TrueTypeFont {
       const subPts = subOutline.points
       const subOn = subOutline.onCurve
       const subEnds = subOutline.contours
-      let dx = 0, dy = 0
+      let dx = 0,
+        dy = 0
       if ((flags & ARGS_ARE_XY_VALUES) !== 0) {
-        dx = arg1; dy = arg2
+        dx = arg1
+        dy = arg2
       } else {
         const idx1 = Math.max(0, Math.min(subPts.length / 2 - 1, arg1))
         const idx2 = Math.max(0, Math.min(assembledPts.length / 2 - 1, arg2))
-        const lx = subPts[idx1 * 2]!, ly = subPts[idx1 * 2 + 1]!
+        const lx = subPts[idx1 * 2]!,
+          ly = subPts[idx1 * 2 + 1]!
         const tx = a * lx + b * ly
         const ty = c * lx + d * ly
         const X = assembledPts.length ? assembledPts[idx2 * 2]! : 0
         const Y = assembledPts.length ? assembledPts[idx2 * 2 + 1]! : 0
-        dx = X - tx; dy = Y - ty
+        dx = X - tx
+        dy = Y - ty
       }
       const trPts = new Float32Array(subPts.length)
       for (let i = 0; i < subPts.length; i += 2) {
-        const x = subPts[i]!, y = subPts[i + 1]!
+        const x = subPts[i]!,
+          y = subPts[i + 1]!
         trPts[i] = a * x + b * y + dx
         trPts[i + 1] = c * x + d * y + dy
       }

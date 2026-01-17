@@ -9,7 +9,7 @@ exclude:
   - .idea
   - .cursor
   - tmp
-  - assets
+  - static
   - .firebaserc
   - bun.lock
   - firebase.json
