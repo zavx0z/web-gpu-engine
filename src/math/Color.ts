@@ -3,22 +3,18 @@
  */
 export class Color {
   /**
-   * Красный компонент цвета.
-   * @default 1.0
    * @min 0
    * @max 1
    */
   public r: number = 1.0
+
   /**
-   * Зеленый компонент цвета.
-   * @default 1.0
    * @min 0
    * @max 1
    */
   public g: number = 1.0
+
   /**
-   * Синий компонент цвета.
-   * @default 1.0
    * @min 0
    * @max 1
    */

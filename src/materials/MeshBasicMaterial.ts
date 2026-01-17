@@ -16,9 +16,6 @@ export interface MeshBasicMaterialParameters extends MaterialParameters {
  * Простой материал, который отображает объекты сплошным цветом.
  */
 export class MeshBasicMaterial extends Material {
-  /**
-   * Цвет материала.
-   */
   public color: Color
 
   /**

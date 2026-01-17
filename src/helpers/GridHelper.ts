@@ -10,13 +10,9 @@ import { Color } from "../math/Color"
 export class GridHelper extends LineSegments {
   /**
    * @param size - Размер сетки по осям X и Y.
-   * @default 10
    * @param divisions - Количество делений сетки.
-   * @default 10
-   * @param colorCenterLine - Цвет центральной линии.
-   * @default 0x444444
-   * @param colorGrid - Цвет основных линий сетки.
-   * @default 0x888888
+   * @param colorCenterLine - Цвет центральной линии (Hex).
+   * @param colorGrid - Цвет основных линий сетки (Hex).
    */
   constructor(size = 10, divisions = 10, colorCenterLine: number = 0x444444, colorGrid: number = 0x888888) {
     const center = divisions / 2

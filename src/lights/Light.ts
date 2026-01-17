@@ -3,25 +3,22 @@ import { Color } from "../math/Color"
 
 /**
  * Абстрактный базовый класс для источников света.
+ * Участвует в расчете освещенности (PBR).
  */
 export class Light extends Object3D {
   /**
-   * Цвет источника света.
-   * @default new Color(0xffffff)
+   * RGB составляющая. Изменение влияет на сцену мгновенно.
    */
   public color: Color
 
   /**
-   * Интенсивность (яркость) источника света.
-   * @default 1
+   * Энергия источника (в Люменах).
    */
   public intensity: number
 
   /**
-   * @param color - Цвет источника света.
-   * @default 0xffffff
-   * @param intensity - Интенсивность (яркость) источника света.
-   * @default 1
+   * @param color - Hex integer (напр. `0xff0000`) или экземпляр Color.
+   * @param intensity - Сила света. Ограничение: `>= 0`.
    */
   constructor(color: number | Color = 0xffffff, intensity: number = 1) {
     super()

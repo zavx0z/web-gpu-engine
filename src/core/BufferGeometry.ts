@@ -6,26 +6,30 @@ import { Vector3 } from "../math/Vector3"
 type TypedArray = Float32Array | Uint32Array | Uint16Array | Uint8Array | Int32Array | Int16Array | Int8Array
 
 /**
- * Хранит данные для одного атрибута геометрии (например, позиции вершин, нормали, цвета и т.д.).
+ * Хранит сырые данные для одного атрибута геометрии.
+ * Обеспечивает связь между JS-массивами и буферами GPU.
  */
 export class BufferAttribute {
   /**
-   * Массив с данными атрибута.
+   * Прямая ссылка на типизированный массив данных.
+   * Изменение значений здесь требует установки флага обновления (в будущих версиях).
    */
   public array: TypedArray
+
   /**
-   * Размер компонента атрибута (например, 3 для векторов vec3).
+   * Количество компонентов на одну вершину (stride).
+   * Обычно: 3 (XYZ), 2 (UV), 4 (Tangent/Color).
    */
   public itemSize: number
+
   /**
-   * Количество элементов в массиве.
+   * Общее число вершин в атрибуте (read-only derived).
    */
   public count: number
 
   /**
-   * Создает экземпляр BufferAttribute.
-   * @param array - Массив с данными.
-   * @param itemSize - Размер одного элемента.
+   * @param array - Данные. Передаются по ссылке (не клонируются).
+   * @param itemSize - Компонентность. Ограничение: `[1..4]`.
    */
   constructor(array: TypedArray, itemSize: number) {
     this.array = array
@@ -35,23 +39,28 @@ export class BufferAttribute {
 }
 
 /**
- * Представляет геометрию объекта. Содержит информацию о вершинах, индексах и других атрибутах.
+ * Геометрическое описание 3D-объекта.
+ * Хранит словарь атрибутов и топологию (индексы).
  */
 export class BufferGeometry {
   /**
-   * Атрибуты геометрии, хранящиеся в виде пар "имя-атрибут".
+   * Словарь активных атрибутов.
+   * Ключи соответствуют именам переменных в шейдере (`position`, `normal`, `uv`).
    */
   public attributes: { [name: string]: BufferAttribute } = {}
+
   /**
-   * Индексный буфер для геометрии.
+   * Индексный буфер, определяющий порядок вершин в треугольниках.
+   * Если `null`, используется отрисовка массивом (Non-indexed draw).
    */
   public index: BufferAttribute | null = null
 
   /**
-   * Устанавливает атрибут для геометрии.
-   * @param name - Имя атрибута (например, "position").
-   * @param attribute - Объект BufferAttribute.
-   * @returns Возвращает этот экземпляр для чейнинга.
+   * Добавляет или обновляет атрибут.
+   *
+   * @param name - Семантическое имя (напр. `'position'`, `'uv'`).
+   * @param attribute - Данные атрибута.
+   * @returns Ссылка на себя для чейнинга.
    */
   public setAttribute(name: string, attribute: BufferAttribute): this {
     this.attributes[name] = attribute
@@ -59,9 +68,9 @@ export class BufferGeometry {
   }
 
   /**
-   * Устанавливает индексный буфер для геометрии.
-   * @param index - Объект BufferAttribute с индексами.
-   * @returns Возвращает этот экземпляр для чейнинга.
+   * Устанавливает топологию сетки.
+   *
+   * @param index - Буфер индексов (обычно Uint16 или Uint32).
    */
   public setIndex(index: BufferAttribute): this {
     this.index = index
@@ -69,8 +78,19 @@ export class BufferGeometry {
   }
 
   /**
-   * Вычисляет нормали для вершин на основе граней геометрии.
-   * Предполагает, что геометрия индексирована и состоит из треугольников.
+   * Генерирует нормали вершин на основе геометрии.
+   *
+   * ## Алгоритм (Area Weighted)
+   * Нормаль вершины вычисляется как сумма нормалей прилегающих граней.
+   * Вклад каждой грани **пропорционален её площади**.
+   * Это обеспечивает корректное сглаживание для неравномерных сеток.
+   *
+   * ## Требования
+   * * Геометрия должна иметь атрибут `position`.
+   * * Геометрия должна быть индексированной (`index != null`).
+   *
+   * @returns Создает и записывает новый атрибут `normal`.
+   * При ошибке (нет позиций или индексов) выводит `console.error` и прерывает выполнение.
    */
   public computeVertexNormals(): void {
     const index = this.index
@@ -81,6 +101,12 @@ export class BufferGeometry {
       return
     }
 
+    if (!index) {
+      console.error("BufferGeometry.computeVertexNormals(): поддерживается только индексированная геометрия.")
+      return
+    }
+
+    // Создаем новый буфер для нормалей (обнуленный)
     const normalAttribute = new BufferAttribute(new Float32Array(positionAttribute.count * 3), 3)
 
     const pA = new Vector3(),
@@ -89,15 +115,11 @@ export class BufferGeometry {
     const cb = new Vector3(),
       ab = new Vector3()
 
-    if (!index) {
-      console.error("BufferGeometry.computeVertexNormals(): поддерживается только индексированная геометрия.")
-      return
-    }
-
     const indices = index.array
     const positions = positionAttribute.array
     const normals = normalAttribute.array
 
+    // Итерация по треугольникам
     for (let i = 0, il = index.count; i < il; i += 3) {
       const vA = indices[i + 0]
       const vB = indices[i + 1]
@@ -109,6 +131,10 @@ export class BufferGeometry {
 
       cb.subVectors(pC, pB)
       ab.subVectors(pA, pB)
+
+      // Векторное произведение дает нормаль грани.
+      // Длина этого вектора равна удвоенной площади треугольника.
+      // Складывая их, мы автоматически получаем Area Weighted Average.
       cb.cross(ab)
 
       normals[vA * 3] += cb.x
@@ -124,17 +150,22 @@ export class BufferGeometry {
       normals[vC * 3 + 2] += cb.z
     }
 
-    this.normalizeNormals()
+    this.normalizeNormals(normalAttribute)
     this.attributes.normal = normalAttribute
   }
 
-  private normalizeNormals(): void {
-    const normals = this.attributes.normal.array
+  /**
+   * Нормализует векторы в указанном атрибуте.
+   * Используется как финальный шаг алгоритма Area Weighted Normals.
+   */
+  private normalizeNormals(attribute: BufferAttribute): void {
+    const normals = attribute.array
     const tempNormal = new Vector3()
 
-    for (let i = 0, il = this.attributes.normal.count; i < il; i++) {
+    for (let i = 0, il = attribute.count; i < il; i++) {
       tempNormal.fromArray(normals, i * 3)
       tempNormal.normalize()
+
       normals[i * 3 + 0] = tempNormal.x
       normals[i * 3 + 1] = tempNormal.y
       normals[i * 3 + 2] = tempNormal.z

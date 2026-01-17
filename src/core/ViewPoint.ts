@@ -78,6 +78,12 @@ export class ViewPoint {
   private lastY = 0
   private lastTouchDistance: number | null = null
 
+  /**
+   * Создает и инициализирует точку обзора.
+   *
+   * @param parameters - Конфигурация начального состояния.
+   * @throws Error Если `fov` или `near` <= 0, или если `far` <= `near`.
+   */
   constructor(parameters: ViewPointParameters) {
     this.element = parameters.element
     this.fov = parameters.fov ?? 1 // примерно 57 градусов
@@ -119,6 +125,10 @@ export class ViewPoint {
     this.viewMatrix.makeLookAt(this.position, this.target, this.up)
   }
 
+  /**
+   * Освобождает ресурсы.
+   * Удаляет слушатели событий с DOM-элемента и документа.
+   */
   public dispose() {
     this.element.removeEventListener("mousedown", this.onMouseDown)
     document.removeEventListener("mousemove", this.onMouseMove)

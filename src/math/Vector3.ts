@@ -11,9 +11,9 @@ export class Vector3 {
 
   /**
    * Создает экземпляр Vector3.
-   * @param {number} x - Значение по оси X.
-   * @param {number} y - Значение по оси Y.
-   * @param {number} z - Значение по оси Z.
+   * @param x - Значение по оси X.
+   * @param y - Значение по оси Y.
+   * @param z - Значение по оси Z.
    */
   constructor(x: number = 0, y: number = 0, z: number = 0) {
     this.x = x
@@ -23,10 +23,10 @@ export class Vector3 {
 
   /**
    * Устанавливает значения компонент вектора.
-   * @param {number} x - Значение по оси X.
-   * @param {number} y - Значение по оси Y.
-   * @param {number} z - Значение по оси Z.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param x - Значение по оси X.
+   * @param y - Значение по оси Y.
+   * @param z - Значение по оси Z.
+   * @returns Текущий экземпляр вектора.
    */
   public set(x: number, y: number, z: number): this {
     this.x = x
@@ -37,8 +37,8 @@ export class Vector3 {
 
   /**
    * Копирует значения из другого вектора в этот вектор.
-   * @param {Vector3} v - Вектор, из которого копируются значения.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param v - Вектор, из которого копируются значения.
+   * @returns Текущий экземпляр вектора.
    */
   public copy(v: Vector3): this {
     this.x = v.x
@@ -49,7 +49,7 @@ export class Vector3 {
 
   /**
    * Создает новый экземпляр Vector3 с такими же значениями.
-   * @returns {Vector3} Новый вектор.
+   * @returns Новый вектор.
    */
   public clone(): Vector3 {
     return new Vector3(this.x, this.y, this.z)
@@ -57,8 +57,8 @@ export class Vector3 {
 
   /**
    * Добавляет вектор к текущему вектору.
-   * @param {Vector3} v - Вектор для добавления.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param v - Вектор для добавления.
+   * @returns Текущий экземпляр вектора.
    */
   public add(v: Vector3): this {
     this.x += v.x
@@ -69,8 +69,8 @@ export class Vector3 {
 
   /**
    * Вычитает вектор из текущего вектора.
-   * @param {Vector3} v - Вектор для вычитания.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param v - Вектор для вычитания.
+   * @returns Текущий экземпляр вектора.
    */
   public sub(v: Vector3): this {
     this.x -= v.x
@@ -81,9 +81,9 @@ export class Vector3 {
 
   /**
    * Устанавливает этот вектор как разность двух векторов.
-   * @param {Vector3} a - Первый вектор.
-   * @param {Vector3} b - Второй вектор.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param a - Первый вектор.
+   * @param b - Второй вектор.
+   * @returns Текущий экземпляр вектора.
    */
   public subVectors(a: Vector3, b: Vector3): this {
     this.x = a.x - b.x
@@ -94,8 +94,8 @@ export class Vector3 {
 
   /**
    * Умножает текущий вектор на скаляр.
-   * @param {number} s - Скаляр.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param s - Скаляр.
+   * @returns Текущий экземпляр вектора.
    */
   public multiplyScalar(s: number): this {
     this.x *= s
@@ -106,8 +106,8 @@ export class Vector3 {
 
   /**
    * Вычисляет скалярное произведение этого вектора и вектора v.
-   * @param {Vector3} v - Другой вектор.
-   * @returns {number} Скалярное произведение.
+   * @param v - Другой вектор.
+   * @returns Скалярное произведение.
    */
   public dot(v: Vector3): number {
     return this.x * v.x + this.y * v.y + this.z * v.z
@@ -116,7 +116,7 @@ export class Vector3 {
   /**
    * Устанавливает этот вектор как векторное произведение this и v.
    * @param v Другой вектор.
-   * @returns {this}
+   * @returns Текущий экземпляр вектора.
    */
   public cross(v: Vector3): this {
     return this.crossVectors(this, v)
@@ -124,9 +124,9 @@ export class Vector3 {
 
   /**
    * Устанавливает этот вектор как векторное произведение векторов a и b.
-   * @param {Vector3} a - Первый вектор.
-   * @param {Vector3} b - Второй вектор.
-   * @returns {this} Текущий экземпляр вектора.
+   * @param a - Первый вектор.
+   * @param b - Второй вектор.
+   * @returns Текущий экземпляр вектора.
    */
   public crossVectors(a: Vector3, b: Vector3): this {
     const ax = a.x,
@@ -135,17 +135,15 @@ export class Vector3 {
     const bx = b.x,
       by = b.y,
       bz = b.z
-
     this.x = ay * bz - az * by
     this.y = az * bx - ax * bz
     this.z = ax * by - ay * bx
-
     return this
   }
 
   /**
    * Вычисляет длину вектора.
-   * @returns {number} Длина вектора.
+   * @returns Длина вектора.
    */
   public length(): number {
     return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z)
@@ -153,7 +151,7 @@ export class Vector3 {
 
   /**
    * Нормализует вектор (его длина становится равной 1).
-   * @returns {this} Текущий экземпляр вектора.
+   * @returns Текущий экземпляр вектора.
    */
   public normalize(): this {
     const len = this.length()
@@ -164,7 +162,7 @@ export class Vector3 {
    * Устанавливает компоненты вектора из массива.
    * @param array Массив с компонентами.
    * @param offset Смещение в массиве.
-   * @returns {this}
+   * @returns Текущий экземпляр вектора.
    */
   public fromArray(array: ArrayLike<number>, offset: number = 0): this {
     this.x = array[offset]
@@ -198,17 +196,14 @@ export class Vector3 {
       qy = q.y,
       qz = q.z,
       qw = q.w
-
     // Вычисление uv = 2.0 * cross(q.xyz, v)
     const uvx = 2 * (qy * z - qz * y)
     const uvy = 2 * (qz * x - qx * z)
     const uvz = 2 * (qx * y - qy * x)
-
     // Вычисление v + q.w * uv + cross(q.xyz, uv)
     this.x = x + qw * uvx + (qy * uvz - qz * uvy)
     this.y = y + qw * uvy + (qz * uvx - qx * uvz)
     this.z = z + qw * uvz + (qx * uvy - qy * uvx)
-
     return this
   }
 
@@ -227,13 +222,10 @@ export class Vector3 {
       y = this.y,
       z = this.z
     const e = m.elements
-
     const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15])
-
     this.x = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w
     this.y = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w
     this.z = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w
-
     return this
   }
 }

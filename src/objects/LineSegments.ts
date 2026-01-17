@@ -6,19 +6,9 @@ import { Object3D } from "../core/Object3D"
  * Объект для отрисовки геометрии в виде набора линий.
  */
 export class LineSegments extends Object3D {
-  /**
-   * Геометрия объекта.
-   */
   public geometry: BufferGeometry
-  /**
-   * Материал объекта.
-   */
   public material: Material
 
-  /**
-   * @param geometry - Геометрия, определяющая форму объекта.
-   * @param material - Материал, определяющий внешний вид объекта.
-   */
   constructor(geometry: BufferGeometry, material: Material) {
     super()
     this.geometry = geometry

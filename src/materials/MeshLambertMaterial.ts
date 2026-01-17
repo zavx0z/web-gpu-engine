@@ -17,10 +17,7 @@ export interface MeshLambertMaterialParameters extends MaterialParameters {
  * Отражает свет равномерно во всех направлениях.
  */
 export class MeshLambertMaterial extends Material {
-  /**
-   * Цвет материала.
-   * @default new Color(0xffffff) // белый
-   */
+  /** @default new Color(0xffffff) // белый */
   public color: Color
 
   /**

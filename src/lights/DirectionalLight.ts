@@ -10,10 +10,7 @@ import { Color } from "../math/Color"
  * Распространенный вариант использования — имитация солнечного света.
  */
 export class DirectionalLight extends Light {
-  /**
-   * Цель, в направлении которой светит источник света.
-   * @default new Object3D()
-   */
+  /** @default new Object3D() */
   public target: Object3D
 
   /**

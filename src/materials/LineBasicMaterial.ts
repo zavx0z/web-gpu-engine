@@ -16,6 +16,7 @@ export interface LineBasicMaterialParameters extends MaterialParameters {
  * Базовый материал для отрисовки линий.
  */
 export class LineBasicMaterial extends Material {
+  /** @default new Color(0xffffff) */
   public color: Color
 
   /**

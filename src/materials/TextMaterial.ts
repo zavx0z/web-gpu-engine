@@ -17,10 +17,7 @@ export interface TextMaterialParameters extends MaterialParameters {
  */
 export class TextMaterial extends Material {
   public readonly isTextMaterial: true = true
-  /**
-   * Цвет текста.
-   * @default new Color(0xffffff)
-   */
+  /** @default new Color(0xffffff) */
   public color: Color
 
   /**

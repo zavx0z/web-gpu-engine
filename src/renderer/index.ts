@@ -71,6 +71,11 @@ export class Renderer {
 
   public canvas: HTMLCanvasElement | null = null
 
+  /**
+   * Инициализирует WebGPU устройство и контекст.
+   *
+   * @throws Error Если браузер не поддерживает WebGPU или не удалось получить адаптер.
+   */
   public async init(): Promise<void> {
     if (!navigator.gpu) throw new Error("WebGPU не поддерживается.")
     const adapter = await navigator.gpu.requestAdapter()

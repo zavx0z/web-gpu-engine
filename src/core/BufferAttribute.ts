@@ -1,31 +1,37 @@
 /**
- * Хранит данные для атрибута BufferGeometry.
+ * Низкоуровневый контейнер для вершинных данных (позиции, нормали, цвета).
+ * Данные передаются в GPU "как есть".
  * @see https://threejs.org/docs/#api/en/core/BufferAttribute
  */
 export class BufferAttribute {
   /**
-   * Указывает, что данный объект является BufferAttribute.
+   * Служебный флаг для быстрой проверки типа в рендер-лупе.
    */
   public readonly isBufferAttribute: true = true
+
   /**
-   * Массив с данными.
+   * Сырые данные буфера (обычно TypedArray: Float32Array, Uint16Array и т.д.).
+   * Изменение содержимого требует установки флага `needsUpdate = true`.
    */
   public array: any
+
   /**
-   * Размер одного элемента (например, 3 для векторов).
+   * Количество компонентов на одну вершину.
+   * Например: 3 для позиций (x, y, z), 2 для UV (u, v).
    */
   public itemSize: number
+
   /**
-   * Указывает, должны ли данные быть нормализованы (между 0 и 1 для целых чисел со знаком, или -1 и 1 для целых без знака).
-   * @default false
+   * Определяет трактовку целочисленных данных GPU.
+   * * `true`: Данные маппятся в диапазон [-1.0 ... 1.0] (или [0.0 ... 1.0]).
+   * * `false`: Данные интерпретируются как есть.
    */
   public normalized: boolean
 
   /**
-   * @param array - Массив с данными.
-   * @param itemSize - Размер одного элемента (например, 3 для векторов).
-   * @param normalized - Указывает, должны ли данные быть нормализованы.
-   * @default false
+   * @param array - TypedArray с данными.
+   * @param itemSize - Компонентов на вершину. Ограничение: `[1 ... 4]`.
+   * @param normalized - Авто-нормализация значений GPU.
    */
   constructor(array: any, itemSize: number, normalized = false) {
     this.array = array
@@ -34,7 +40,7 @@ export class BufferAttribute {
   }
 
   /**
-   * Количество элементов в буфере.
+   * Количество вершин в атрибуте (длина массива / itemSize).
    */
   get count(): number {
     return this.array.length / this.itemSize
@@ -42,14 +48,13 @@ export class BufferAttribute {
 }
 
 /**
- * BufferAttribute для данных в формате Float32.
+ * Хелпер для создания атрибута строго на базе Float32Array.
+ * Используется для позиций, нормалей и большинства вычислений.
  */
 export class Float32BufferAttribute extends BufferAttribute {
   /**
-   * @param array - Массив чисел или Float32Array.
-   * @param itemSize - Размер одного элемента.
-   * @param normalized - Указывает, должны ли данные быть нормализованы.
-   * @default false
+   * @param array - Обычный массив `number[]` (будет конвертирован) или готовый `Float32Array`.
+   * @param itemSize - Компонентов на вершину.
    */
   constructor(array: number[] | Float32Array, itemSize: number, normalized = false) {
     super(new Float32Array(array), itemSize, normalized)
