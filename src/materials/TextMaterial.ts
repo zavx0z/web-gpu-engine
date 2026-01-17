@@ -1,16 +1,33 @@
-import { Color } from '../math/Color';
-import { Material, MaterialParameters } from './Material';
+import { Color } from "../math/Color"
+import { Material, MaterialParameters } from "./Material"
 
+/**
+ * Параметры для создания {@link TextMaterial}.
+ */
 export interface TextMaterialParameters extends MaterialParameters {
-	color?: number | Color;
+  /**
+   * Цвет текста.
+   * @default 0xffffff
+   */
+  color?: number | Color
 }
 
+/**
+ * Материал для отрисовки текста.
+ */
 export class TextMaterial extends Material {
-	public readonly isTextMaterial: true = true;
-	public color: Color;
+  public readonly isTextMaterial: true = true
+  /**
+   * Цвет текста.
+   * @default new Color(0xffffff)
+   */
+  public color: Color
 
-	constructor(parameters: TextMaterialParameters = {}) {
-		super(parameters);
-		this.color = new Color(parameters.color ?? 0xffffff);
-	}
+  /**
+   * @param parameters - Параметры материала.
+   */
+  constructor(parameters: TextMaterialParameters = {}) {
+    super(parameters)
+    this.color = new Color(parameters.color ?? 0xffffff)
+  }
 }

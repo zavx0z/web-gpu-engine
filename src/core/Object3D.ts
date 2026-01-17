@@ -12,20 +12,20 @@ import { Vector3 } from "../math/Vector3"
  * * Вращение `.rotation` / `.quaternion` применяется соответственно.
  */
 export class Object3D {
-	/**
-	 * Позиция объекта в виде вектора {x, y, z}.
-	 * @default new Vector3(0, 0, 0)
-	 */
-	public position: Vector3 = new Vector3()
+  /**
+   * Позиция объекта в виде вектора {x, y, z}.
+   * @default new Vector3(0, 0, 0)
+   */
+  public position: Vector3 = new Vector3()
 
-	/**
-	 * Кватернион, определяющий вращение объекта.
-	 * @default new Quaternion()
-	 */
-	public quaternion: Quaternion = new Quaternion()
+  /**
+   * Кватернион, определяющий вращение объекта.
+   * @default new Quaternion()
+   */
+  public quaternion: Quaternion = new Quaternion()
 
-	// Внутреннее свойство для хранения вращения в углах Эйлера.
-	private _rotation: Vector3 = new Vector3()
+  // Внутреннее свойство для хранения вращения в углах Эйлера.
+  private _rotation: Vector3 = new Vector3()
 
   /**
    * Вращение объекта в радианах в виде углов Эйлера {x, y, z}.
@@ -39,36 +39,36 @@ export class Object3D {
     this.quaternion.setFromEuler(value.x, value.y, value.z)
   }
 
-	/**
-	 * Масштаб объекта в виде вектора {x, y, z}.
-	 * @default new Vector3(1, 1, 1)
-	 */
-	public scale: Vector3 = new Vector3(1, 1, 1)
+  /**
+   * Масштаб объекта в виде вектора {x, y, z}.
+   * @default new Vector3(1, 1, 1)
+   */
+  public scale: Vector3 = new Vector3(1, 1, 1)
 
-	/**
-	 * Локальная матрица преобразования объекта.
-	 * @default new Matrix4()
-	 */
-	public modelMatrix: Matrix4 = new Matrix4()
+  /**
+   * Локальная матрица преобразования объекта.
+   * @default new Matrix4()
+   */
+  public modelMatrix: Matrix4 = new Matrix4()
 
-	/**
-	 * Массив дочерних объектов.
-	 */
-	public children: Object3D[] = []
+  /**
+   * Массив дочерних объектов.
+   */
+  public children: Object3D[] = []
 
-	/**
-	 * Видимость объекта. Если false, объект не будет отрисован.
-	 * @default true
-	 */
-	public visible: boolean = true
+  /**
+   * Видимость объекта. Если false, объект не будет отрисован.
+   * @default true
+   */
+  public visible: boolean = true
 
-	/**
-	 * Добавляет дочерний объект к этому объекту.
-	 * @param {Object3D} child - Дочерний объект.
-	 */
-	public add(child: Object3D): void {
-		this.children.push(child)
-	}
+  /**
+   * Добавляет дочерний объект к этому объекту.
+   * @param child - Дочерний объект.
+   */
+  public add(child: Object3D): void {
+    this.children.push(child)
+  }
 
   /**
    * Обновляет локальную матрицу преобразования объекта

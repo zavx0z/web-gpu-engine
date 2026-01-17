@@ -5,297 +5,292 @@ import { Mesh } from "../core/Mesh"
 import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Color } from "../math/Color"
-import { Matrix4 } from "../math/Matrix4"
 
 // Определение интерфейсов для структуры glTF
 interface GLTF {
-	scenes?: GLTFScene[]
-	scene?: number
-	nodes?: GLTFNode[]
-	meshes?: GLTFMesh[]
-	buffers?: GLTFBuffer[]
-	bufferViews?: GLTFBufferView[]
-	accessors?: GLTFAccessor[]
-	materials?: GLTFMaterial[]
+  scenes?: GLTFScene[]
+  scene?: number
+  nodes?: GLTFNode[]
+  meshes?: GLTFMesh[]
+  buffers?: GLTFBuffer[]
+  bufferViews?: GLTFBufferView[]
+  accessors?: GLTFAccessor[]
+  materials?: GLTFMaterial[]
 }
 
 interface GLTFScene {
-	nodes: number[]
+  nodes: number[]
 }
 
 interface GLTFNode {
-	mesh?: number
-	children?: number[]
-	matrix?: number[]
-	translation?: [number, number, number]
-	rotation?: [number, number, number, number]
-	scale?: [number, number, number]
+  mesh?: number
+  children?: number[]
+  matrix?: number[]
+  translation?: [number, number, number]
+  rotation?: [number, number, number, number]
+  scale?: [number, number, number]
 }
 
 interface GLTFMesh {
-	primitives: GLTFPrimitive[]
+  primitives: GLTFPrimitive[]
 }
 
 interface GLTFPrimitive {
-	attributes: { [key: string]: number }
-	indices?: number
-	material?: number
+  attributes: { [key: string]: number }
+  indices?: number
+  material?: number
 }
 
 interface GLTFBuffer {
-	uri: string
-	byteLength: number
+  uri: string
+  byteLength: number
 }
 
 interface GLTFBufferView {
-	buffer: number
-	byteOffset?: number
-	byteLength: number
-	target?: number
+  buffer: number
+  byteOffset?: number
+  byteLength: number
+  target?: number
 }
 
 interface GLTFAccessor {
-	bufferView?: number
-	byteOffset?: number
-	componentType: number
-	count: number
-	type: string
+  bufferView?: number
+  byteOffset?: number
+  componentType: number
+  count: number
+  type: string
 }
 
 interface GLTFMaterial {
-	pbrMetallicRoughness?: {
-		baseColorFactor?: [number, number, number, number]
-	}
+  pbrMetallicRoughness?: {
+    baseColorFactor?: [number, number, number, number]
+  }
 }
 
 /**
  * Загрузчик для файлов формата glTF.
  */
 export class GLTFLoader {
-	/**
-	 * Загружает и парсит glTF файл.
-	 * @param url - Путь к glTF файлу.
-	 * @returns Promise, который разрешается со сценой, созданной из glTF.
-	 */
-	public async load(url: string): Promise<{ scene: Scene }> {
-		const response = await fetch(url)
-		const gltf = (await response.json()) as GLTF
+  /**
+   * Загружает и парсит glTF файл.
+   * @param url - Путь к glTF файлу.
+   * @returns Promise, который разрешается со сценой, созданной из glTF.
+   */
+  public async load(url: string): Promise<{ scene: Scene }> {
+    const response = await fetch(url)
+    const gltf = (await response.json()) as GLTF
 
-		const baseUri = url.substring(0, url.lastIndexOf("/") + 1)
+    const baseUri = url.substring(0, url.lastIndexOf("/") + 1)
 
-		const buffers = await this.loadBuffers(gltf, baseUri)
-		const materials = this.parseMaterials(gltf)
-		const scene = new Scene()
+    const buffers = await this.loadBuffers(gltf, baseUri)
+    const materials = this.parseMaterials(gltf)
+    const scene = new Scene()
 
-		// Создаем контейнер-враппер для автоматической коррекции осей.
-		// Поворачиваем на 90 градусов по X, чтобы перевести Y-up в Z-up.
-		const modelWrapper = new Object3D()
-		modelWrapper.rotation = new Vector3(Math.PI / 2, 0, 0)
-		modelWrapper.updateMatrix()
-		scene.add(modelWrapper)
+    // Создаем контейнер-враппер для автоматической коррекции осей.
+    // Поворачиваем на 90 градусов по X, чтобы перевести Y-up в Z-up.
+    const modelWrapper = new Object3D()
+    modelWrapper.rotation = new Vector3(Math.PI / 2, 0, 0)
+    modelWrapper.updateMatrix()
+    scene.add(modelWrapper)
 
-		if (gltf.scene !== undefined && gltf.scenes) {
-			const sceneDef = gltf.scenes[gltf.scene]
-			for (const nodeIndex of sceneDef.nodes) {
-				const node = this.parseNode(gltf, nodeIndex, buffers, materials)
-				if (node) {
-					modelWrapper.add(node)
-				}
-			}
-		}
+    if (gltf.scene !== undefined && gltf.scenes) {
+      const sceneDef = gltf.scenes[gltf.scene]
+      for (const nodeIndex of sceneDef.nodes) {
+        const node = this.parseNode(gltf, nodeIndex, buffers, materials)
+        if (node) {
+          modelWrapper.add(node)
+        }
+      }
+    }
 
-		return { scene }
-	}
+    return { scene }
+  }
 
-	private async loadBuffers(gltf: GLTF, baseUri: string): Promise<ArrayBuffer[]> {
-		const promises: Promise<ArrayBuffer>[] = []
-		if (gltf.buffers) {
-			for (const bufferInfo of gltf.buffers) {
-				promises.push(
-					fetch(baseUri + bufferInfo.uri)
-						.then((res) => res.arrayBuffer())
-						.then((arrayBuffer) => {
-							if (arrayBuffer.byteLength < bufferInfo.byteLength) {
-								throw new Error("Длина загруженного буфера меньше, чем указано в glTF.")
-							}
-							return arrayBuffer
-						})
-				)
-			}
-		}
-		return Promise.all(promises)
-	}
+  private async loadBuffers(gltf: GLTF, baseUri: string): Promise<ArrayBuffer[]> {
+    const promises: Promise<ArrayBuffer>[] = []
+    if (gltf.buffers) {
+      for (const bufferInfo of gltf.buffers) {
+        promises.push(
+          fetch(baseUri + bufferInfo.uri)
+            .then((res) => res.arrayBuffer())
+            .then((arrayBuffer) => {
+              if (arrayBuffer.byteLength < bufferInfo.byteLength) {
+                throw new Error("Длина загруженного буфера меньше, чем указано в glTF.")
+              }
+              return arrayBuffer
+            })
+        )
+      }
+    }
+    return Promise.all(promises)
+  }
 
-	private parseMaterials(gltf: GLTF): MeshLambertMaterial[] {
-		const materials: MeshLambertMaterial[] = []
-		if (gltf.materials) {
-			for (const mat of gltf.materials) {
-				let color
-				if (mat.pbrMetallicRoughness?.baseColorFactor) {
-					const [r, g, b] = mat.pbrMetallicRoughness.baseColorFactor
-					color = new Color(r, g, b)
-				}
-				materials.push(new MeshLambertMaterial({ color }))
-			}
-		}
-		return materials
-	}
+  private parseMaterials(gltf: GLTF): MeshLambertMaterial[] {
+    const materials: MeshLambertMaterial[] = []
+    if (gltf.materials) {
+      for (const mat of gltf.materials) {
+        let color
+        if (mat.pbrMetallicRoughness?.baseColorFactor) {
+          const [r, g, b] = mat.pbrMetallicRoughness.baseColorFactor
+          color = new Color(r, g, b)
+        }
+        materials.push(new MeshLambertMaterial({ color }))
+      }
+    }
+    return materials
+  }
 
-	private parseNode(
-		gltf: GLTF,
-		nodeIndex: number,
-		buffers: ArrayBuffer[],
-		materials: MeshLambertMaterial[]
-	): Object3D | null {
-		const nodeDef = gltf.nodes![nodeIndex]
-		const node = new Object3D()
+  private parseNode(
+    gltf: GLTF,
+    nodeIndex: number,
+    buffers: ArrayBuffer[],
+    materials: MeshLambertMaterial[]
+  ): Object3D | null {
+    const nodeDef = gltf.nodes![nodeIndex]
+    const node = new Object3D()
 
-		// Установка трансформации
-		if (nodeDef.matrix) {
-			node.modelMatrix.elements.set(nodeDef.matrix)
-		} else {
-			if (nodeDef.translation) {
-				node.position.x = nodeDef.translation[0]
-				node.position.y = nodeDef.translation[1]
-				node.position.z = nodeDef.translation[2]
-			}
-			if (nodeDef.rotation) {
-				node.quaternion.x = nodeDef.rotation[0]
-				node.quaternion.y = nodeDef.rotation[1]
-				node.quaternion.z = nodeDef.rotation[2]
-				node.quaternion.w = nodeDef.rotation[3]
-			}
-			if (nodeDef.scale) {
-				node.scale.x = nodeDef.scale[0]
-				node.scale.y = nodeDef.scale[1]
-				node.scale.z = nodeDef.scale[2]
-			}
-			node.updateMatrix() // Собираем матрицу из позиции, вращения и масштаба
-		}
+    // Установка трансформации
+    if (nodeDef.matrix) {
+      node.modelMatrix.elements.set(nodeDef.matrix)
+    } else {
+      if (nodeDef.translation) {
+        node.position.x = nodeDef.translation[0]
+        node.position.y = nodeDef.translation[1]
+        node.position.z = nodeDef.translation[2]
+      }
+      if (nodeDef.rotation) {
+        node.quaternion.x = nodeDef.rotation[0]
+        node.quaternion.y = nodeDef.rotation[1]
+        node.quaternion.z = nodeDef.rotation[2]
+        node.quaternion.w = nodeDef.rotation[3]
+      }
+      if (nodeDef.scale) {
+        node.scale.x = nodeDef.scale[0]
+        node.scale.y = nodeDef.scale[1]
+        node.scale.z = nodeDef.scale[2]
+      }
+      node.updateMatrix() // Собираем матрицу из позиции, вращения и масштаба
+    }
 
-		if (nodeDef.mesh !== undefined) {
-			const meshDef = gltf.meshes![nodeDef.mesh]
-			for (const primitive of meshDef.primitives) {
-				const geometry = this.parseGeometry(gltf, primitive, buffers)
-				const material = primitive.material !== undefined ? materials[primitive.material] : new MeshLambertMaterial()
-				const mesh = new Mesh(geometry, material)
-				node.add(mesh)
-			}
-		}
+    if (nodeDef.mesh !== undefined) {
+      const meshDef = gltf.meshes![nodeDef.mesh]
+      for (const primitive of meshDef.primitives) {
+        const geometry = this.parseGeometry(gltf, primitive, buffers)
+        const material = primitive.material !== undefined ? materials[primitive.material] : new MeshLambertMaterial()
+        const mesh = new Mesh(geometry, material)
+        node.add(mesh)
+      }
+    }
 
-		if (nodeDef.children) {
-			for (const childIndex of nodeDef.children) {
-				const childNode = this.parseNode(gltf, childIndex, buffers, materials)
-				if (childNode) {
-					node.add(childNode)
-				}
-			}
-		}
+    if (nodeDef.children) {
+      for (const childIndex of nodeDef.children) {
+        const childNode = this.parseNode(gltf, childIndex, buffers, materials)
+        if (childNode) {
+          node.add(childNode)
+        }
+      }
+    }
 
-		return node
-	}
+    return node
+  }
 
-	private parseGeometry(gltf: GLTF, primitive: GLTFPrimitive, buffers: ArrayBuffer[]): BufferGeometry {
-		const geometry = new BufferGeometry()
-		for (const [attributeName, accessorIndex] of Object.entries(primitive.attributes)) {
-			if (attributeName === "POSITION") {
-				const accessor = gltf.accessors![accessorIndex]
-				const bufferView = gltf.bufferViews![accessor.bufferView!]
-				const buffer = buffers[bufferView.buffer]
-				const componentType = accessor.componentType
-				const type = accessor.type
-				const count = accessor.count
+  private parseGeometry(gltf: GLTF, primitive: GLTFPrimitive, buffers: ArrayBuffer[]): BufferGeometry {
+    const geometry = new BufferGeometry()
+    for (const [attributeName, accessorIndex] of Object.entries(primitive.attributes)) {
+      if (attributeName === "POSITION") {
+        const accessor = gltf.accessors![accessorIndex]
+        const bufferView = gltf.bufferViews![accessor.bufferView!]
+        const buffer = buffers[bufferView.buffer]
+        const componentType = accessor.componentType
+        const type = accessor.type
+        const count = accessor.count
 
-				const TypedArray = this.getTypedArray(componentType)
-				const itemSize = this.getItemSize(type)
+        const TypedArray = this.getTypedArray(componentType)
+        const itemSize = this.getItemSize(type)
 
-				const array = new TypedArray(
-					buffer,
-					(bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
-					count * itemSize
-				)
-				geometry.setAttribute("position", new BufferAttribute(array, itemSize))
-			} else if (attributeName === "NORMAL") {
-				const accessor = gltf.accessors![accessorIndex]
-				const bufferView = gltf.bufferViews![accessor.bufferView!]
-				const buffer = buffers[bufferView.buffer]
-				const componentType = accessor.componentType
-				const type = accessor.type
-				const count = accessor.count
+        const array = new TypedArray(
+          buffer,
+          (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
+          count * itemSize
+        )
+        geometry.setAttribute("position", new BufferAttribute(array, itemSize))
+      } else if (attributeName === "NORMAL") {
+        const accessor = gltf.accessors![accessorIndex]
+        const bufferView = gltf.bufferViews![accessor.bufferView!]
+        const buffer = buffers[bufferView.buffer]
+        const componentType = accessor.componentType
+        const type = accessor.type
+        const count = accessor.count
 
-				const TypedArray = this.getTypedArray(componentType)
-				const itemSize = this.getItemSize(type)
+        const TypedArray = this.getTypedArray(componentType)
+        const itemSize = this.getItemSize(type)
 
-				const array = new TypedArray(
-					buffer,
-					(bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
-					count * itemSize
-				)
-				geometry.setAttribute("normal", new BufferAttribute(array, itemSize))
-			}
-		}
+        const array = new TypedArray(
+          buffer,
+          (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
+          count * itemSize
+        )
+        geometry.setAttribute("normal", new BufferAttribute(array, itemSize))
+      }
+    }
 
-		if (primitive.indices !== undefined) {
-			const accessor = gltf.accessors![primitive.indices]
-			const bufferView = gltf.bufferViews![accessor.bufferView!]
-			const buffer = buffers[bufferView.buffer]
-			const componentType = accessor.componentType
-			const count = accessor.count
+    if (primitive.indices !== undefined) {
+      const accessor = gltf.accessors![primitive.indices]
+      const bufferView = gltf.bufferViews![accessor.bufferView!]
+      const buffer = buffers[bufferView.buffer]
+      const componentType = accessor.componentType
+      const count = accessor.count
 
-			const TypedArray = this.getTypedArray(componentType)
-			const array = new TypedArray(
-				buffer,
-				(bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
-				count
-			)
-			geometry.setIndex(new BufferAttribute(array, 1))
-		}
-		// Если в glTF нет нормалей, и нет индексов, мы не можем их сгенерировать
-		// Но если есть индексы, то можно попробовать
-		else if (geometry.index) {
-			geometry.computeVertexNormals()
-		}
+      const TypedArray = this.getTypedArray(componentType)
+      const array = new TypedArray(buffer, (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0), count)
+      geometry.setIndex(new BufferAttribute(array, 1))
+    }
+    // Если в glTF нет нормалей, и нет индексов, мы не можем их сгенерировать
+    // Но если есть индексы, то можно попробовать
+    else if (geometry.index) {
+      geometry.computeVertexNormals()
+    }
 
-		return geometry
-	}
+    return geometry
+  }
 
-	private getTypedArray(componentType: number): any {
-		switch (componentType) {
-			case 5120: // BYTE
-				return Int8Array
-			case 5121: // UNSIGNED_BYTE
-				return Uint8Array
-			case 5122: // SHORT
-				return Int16Array
-			case 5123: // UNSIGNED_SHORT
-				return Uint16Array
-			case 5125: // UNSIGNED_INT
-				return Uint32Array
-			case 5126: // FLOAT
-				return Float32Array
-			default:
-				throw new Error(`Unsupported componentType: ${componentType}`)
-		}
-	}
+  private getTypedArray(componentType: number): any {
+    switch (componentType) {
+      case 5120: // BYTE
+        return Int8Array
+      case 5121: // UNSIGNED_BYTE
+        return Uint8Array
+      case 5122: // SHORT
+        return Int16Array
+      case 5123: // UNSIGNED_SHORT
+        return Uint16Array
+      case 5125: // UNSIGNED_INT
+        return Uint32Array
+      case 5126: // FLOAT
+        return Float32Array
+      default:
+        throw new Error(`Unsupported componentType: ${componentType}`)
+    }
+  }
 
-	private getItemSize(type: string): number {
-		switch (type) {
-			case "SCALAR":
-				return 1
-			case "VEC2":
-				return 2
-			case "VEC3":
-				return 3
-			case "VEC4":
-				return 4
-			case "MAT2":
-				return 4
-			case "MAT3":
-				return 9
-			case "MAT4":
-				return 16
-			default:
-				throw new Error(`Unsupported type: ${type}`)
-		}
-	}
+  private getItemSize(type: string): number {
+    switch (type) {
+      case "SCALAR":
+        return 1
+      case "VEC2":
+        return 2
+      case "VEC3":
+        return 3
+      case "VEC4":
+        return 4
+      case "MAT2":
+        return 4
+      case "MAT3":
+        return 9
+      case "MAT4":
+        return 16
+      default:
+        throw new Error(`Unsupported type: ${type}`)
+    }
+  }
 }

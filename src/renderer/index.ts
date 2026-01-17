@@ -1,17 +1,15 @@
 import { Scene } from "../scenes/Scene"
 import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
-import { Object3D } from "../core/Object3D"
 import { BufferGeometry } from "../core/BufferGeometry"
 import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Matrix4 } from "../math/Matrix4"
 import { LineSegments } from "../objects/LineSegments"
 import { LineBasicMaterial } from "../materials/LineBasicMaterial"
-import { Light } from "../lights/Light"
 import { Vector3 } from "../math/Vector3"
-import { Text } from "../objects/Text";
-import { TextMaterial } from "../materials/TextMaterial";
+import { Text } from "../objects/Text"
+import { TextMaterial } from "../materials/TextMaterial"
 
 import meshShaderCode from "./shaders/mesh.wgsl" with { type: "text" }
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
@@ -403,8 +401,6 @@ export class Renderer {
 
     this.device.queue.submit([commandEncoder.finish()])
   }
-
-
 
   private updateSceneUniforms(lights: LightItem[], viewMatrix: Matrix4): void {
     if (!this.device || !this.sceneUniformBuffer) return

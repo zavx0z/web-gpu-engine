@@ -1,6 +1,6 @@
-import { Light } from './Light'
-import { Object3D } from '../core/Object3D'
-import { Color } from '../math/Color'
+import { Light } from "./Light"
+import { Object3D } from "../core/Object3D"
+import { Color } from "../math/Color"
 
 /**
  * Направленный источник света.
@@ -10,21 +10,21 @@ import { Color } from '../math/Color'
  * Распространенный вариант использования — имитация солнечного света.
  */
 export class DirectionalLight extends Light {
-	/**
-	 * Цель, в направлении которой светит источник света.
-	 * @default new Object3D()
-	 */
-	public target: Object3D
+  /**
+   * Цель, в направлении которой светит источник света.
+   * @default new Object3D()
+   */
+  public target: Object3D
 
-	/**
-	 * @param color Цвет источника света.
-	 * @param intensity Интенсивность света.
-	 */
-	constructor(color: number | Color, intensity: number) {
-		super(color, intensity)
+  /**
+   * @param color - Цвет источника света.
+   * @param intensity - Интенсивность света.
+   */
+  constructor(color: number | Color, intensity: number) {
+    super(color, intensity)
 
-		this.target = new Object3D()
-		// По умолчанию свет направлен из (0, 0, 1) в (0, 0, 0)
-		this.position.set(0, 0, 1)
-	}
+    this.target = new Object3D()
+    // По умолчанию свет направлен из (0, 0, 1) в (0, 0, 0)
+    this.position.set(0, 0, 1)
+  }
 }

@@ -15,10 +15,10 @@ import { Material } from "../materials/Material"
  *
  * @example
  * ```ts
- * const geometry = new BoxGeometry(1, 1, 1);
+ * const geometry = new TorusGeometry();
  * const material = new MeshBasicMaterial({ color: 0xff0000 });
- * const cube = new Mesh(geometry, material);
- * scene.add(cube);
+ * const torus = new Mesh(geometry, material);
+ * scene.add(torus);
  * ```
  */
 export class Mesh extends Object3D {

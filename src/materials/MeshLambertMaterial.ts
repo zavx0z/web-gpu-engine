@@ -1,16 +1,15 @@
-
-import { Color } from '../math/Color'
-import { Material, MaterialParameters } from './Material'
+import { Color } from "../math/Color"
+import { Material, MaterialParameters } from "./Material"
 
 /**
  * Параметры для создания {@link MeshLambertMaterial}.
  */
 export interface MeshLambertMaterialParameters extends MaterialParameters {
-	/**
-	 * Цвет материала.
-	 * @default new Color(0xffffff) // белый
-	 */
-	color?: number | Color
+  /**
+   * Цвет материала.
+   * @default new Color(0xffffff) // белый
+   */
+  color?: number | Color
 }
 
 /**
@@ -18,18 +17,18 @@ export interface MeshLambertMaterialParameters extends MaterialParameters {
  * Отражает свет равномерно во всех направлениях.
  */
 export class MeshLambertMaterial extends Material {
-	/**
-	 * Цвет материала.
-	 * @default new Color(0xffffff) // белый
-	 */
-	public color: Color
+  /**
+   * Цвет материала.
+   * @default new Color(0xffffff) // белый
+   */
+  public color: Color
 
-	/**
-	 * @param parameters Параметры материала.
-	 */
-	constructor(parameters: MeshLambertMaterialParameters = {}) {
-		super(parameters)
+  /**
+   * @param parameters - Параметры материала.
+   */
+  constructor(parameters: MeshLambertMaterialParameters = {}) {
+    super(parameters)
 
-		this.color = new Color(parameters.color ?? 0xffffff)
-	}
+    this.color = new Color(parameters.color ?? 0xffffff)
+  }
 }

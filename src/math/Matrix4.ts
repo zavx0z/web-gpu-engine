@@ -136,7 +136,7 @@ export class Matrix4 {
 		const det = n11 * t11 + n21 * t12 + n31 * t13 + n41 * t14
 
 		if (det === 0) {
-			console.error("Matrix4.invert(): can\'t invert matrix, determinant is 0")
+			console.error("Matrix4.invert(): can\\'t invert matrix, determinant is 0")
 			return this.identity()
 		}
 
