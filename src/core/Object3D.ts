@@ -46,6 +46,11 @@ export class Object3D {
    */
   public visible: boolean = true
 
+  /**
+   * Добавляет дочерний объект в иерархию.
+   *
+   * @param child - Объект для добавления в качестве дочернего элемента
+   */
   public add(child: Object3D): void {
     this.children.push(child)
   }

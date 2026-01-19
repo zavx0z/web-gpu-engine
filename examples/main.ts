@@ -24,6 +24,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderer.setPixelRatio(window.devicePixelRatio)
   // Устанавливаем начальный размер
   renderer.setSize(window.innerWidth, window.innerHeight)
+  window.addEventListener("resize", () => {
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    viewPoint.setAspectRatio(window.innerWidth / window.innerHeight)
+  })
   document.body.appendChild(renderer.canvas)
 
   const scene = new Scene()
@@ -32,37 +36,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   const viewPoint = new ViewPoint({
     element: renderer.canvas,
     fov: (2 * Math.PI) / 5,
-    position: { x: 1000, y: -1000, z: 800 },
-    near: 0.1,
-    far: 10000,
+    position: { x: 0.5, y: -2, z: 0.4 },
+    near: .1,
+    far: 100,
   })
 
-  const grid = new GridHelper(1000, 20)
+  const grid = new GridHelper(2, 20)
   scene.add(grid)
 
   const light = new Light(new Color(1, 1, 1), 1)
-  light.position.set(1113, -1113, 1113)
+  light.position.set(4, -4, 4)
   light.updateMatrix()
   scene.add(light)
 
-  window.addEventListener("resize", () => {
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    viewPoint.setAspectRatio(window.innerWidth / window.innerHeight)
-  })
-
   // --- Загрузка GLTF модели ---
   const loader = new GLTFLoader()
-  const gltf = await loader.load("./models/engine/2CylinderEngine.gltf")
-  gltf.scene.position.set(0, 0, 180)
+  const gltf = await loader.load("./models/engine.gltf")
+  gltf.scene.position.set(0, 0, 0.2)
   gltf.scene.rotation.z = Math.PI
   gltf.scene.updateMatrix()
   scene.add(gltf.scene)
 
   try {
     const font = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
-    const text = new Text("WebGPU Engine", font, 150, new TextMaterial({ color: new Color(1.0, 0.0, 0.0) }))
+    const text = new Text("WebGPU Engine", font, 0.2, new TextMaterial({ color: new Color(1.0, 0.0, 0.0) }))
     text.rotation.x = Math.PI / 2
-    text.position.set(-600, 0, 400)
+    text.position.set(-0.8, 0, 0.4)
     text.updateMatrix()
     scene.add(text)
   } catch (e) {

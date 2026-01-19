@@ -14,6 +14,9 @@ Bun.serve({
     "/JetBrainsMono-Bold.ttf": file("./static/JetBrainsMono-Bold.ttf"),
     "/models/engine/2CylinderEngine.gltf": file("./static/models/engine/2CylinderEngine.gltf"),
     "/models/engine/2CylinderEngine0.bin": file("./static/models/engine/2CylinderEngine0.bin"),
+    "/models/bots.glb": file("./static/models/bots.glb"),
+    "/models/engine.gltf": file("./static/engine.gltf"),
+    "/models/engine.bin": file("./static/engine.bin"),
     // "/gl-matrix.js": new Response(Bun.file("./gl-matrix.js"), {
     //   headers: {
     //     "Content-Type": "application/javascript",

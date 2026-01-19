@@ -17,3 +17,5 @@ exclude:
   - .gitignore
   - .DS_Store
   - JetBrainsMono-Bold.ttf
+  - "*.bin"
+  - '*.glb'

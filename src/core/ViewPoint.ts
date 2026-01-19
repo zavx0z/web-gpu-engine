@@ -6,11 +6,42 @@ import { Vector3 } from "../math/Vector3"
  * Параметры для создания точки обзора.
  */
 export interface ViewPointParameters {
+  /**
+   * HTML-элемент, в котором будет отображаться сцена.
+   * Служит для расчёта соотношения сторон и привязки событий ввода.
+   */
   element: HTMLElement
+
+  /**
+   * Угол обзора (field of view) в радианах.
+   * @default 1 (≈57°)
+   */
   fov?: number
+
+  /**
+   * Ближняя плоскость отсечения. Объекты ближе этой distance не отображаются.
+   * @default 0.1
+   * @mustBe > 0
+   */
   near?: number
+
+  /**
+   * Дальняя плоскость отсечения. Объекты дальше этой distance не отображаются.
+   * @default 1000
+   * @mustBe > near
+   */
   far?: number
+
+  /**
+   * Начальная позиция камеры.
+   * @default { x: 10, y: -10, z: 10 }
+   */
   position?: { x: number; y: number; z: number }
+
+  /**
+   * Точка, на которую смотрит камера (фокус).
+   * @default { x: 0, y: 0, z: 0 }
+   */
   target?: { x: number; y: number; z: number }
 }
 

@@ -1,12 +1,14 @@
 /**
  * @packageDocumentation
  * @module GLTFLoader
- *
+ * 
  * Модуль для загрузки и парсинга 3D-моделей в формате glTF 2.0.
- *
+ * Поддерживает как стандартный формат (`.gltf` + `.bin`), так и бинарный (`.glb`).
+ * 
  * **Архитектура**
  * - **GLTFLoader**: Основной класс, управляющий процессом загрузки.
- * - **Асинхронная загрузка**: Сначала загружается JSON-описание, затем параллельно подгружаются все необходимые бинарные буферы (`.bin`).
+ * - **Универсальный метод `load`**: Автоматически определяет формат файла (JSON или бинарный) и вызывает соответствующий парсер.
+ * - **Асинхронная загрузка**: Для `.gltf` сначала загружается JSON, затем параллельно подгружаются все необходимые бинарные буферы. Для `.glb` все загружается одним запросом.
  * - **Рекурсивный парсинг**: Сцена строится путем рекурсивного обхода графа узлов (`nodes`) из glTF.
  * - **Преобразование координат**: Загрузчик может автоматически применять трансформацию для преобразования системы координат glTF (Y-up) в систему координат движка (Z-up). Это поведение управляется флагом.
  * - **Ограниченная поддержка материалов**: В текущей реализации парсер материалов создает `MeshLambertMaterial`, используя только `baseColorFactor`.
@@ -19,6 +21,11 @@ import { Mesh } from "../core/Mesh"
 import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Color } from "../math/Color"
+
+// --- GLTF Constants ---
+const GLB_MAGIC = 0x46546C67 // "glTF" в ASCII
+const JSON_CHUNK_TYPE = 0x4E4F534A // "JSON" в ASCII
+const BIN_CHUNK_TYPE = 0x004E4942 // "BIN\0" в ASCII
 
 // --- GLTF SPECIFICATION INTERFACES ---
 // Эти интерфейсы отражают структуру JSON-файла glTF 2.0, обеспечивая строгую типизацию.
@@ -78,7 +85,7 @@ interface GLTFPrimitive {
 /** Ссылка на бинарный файл (.bin) и его размер. */
 interface GLTFBuffer {
   /** URI бинарного файла. Может быть относительным путем или Data URI. */
-  uri: string
+  uri?: string
   /** Длина буфера в байтах. */
   byteLength: number
 }
@@ -143,33 +150,26 @@ interface GLTFLoaderOptions {
 
 /**
  * Загрузчик для файлов формата glTF 2.0.
- *
- * **Внутренняя логика**
- * 1. Загружает JSON-файл.
- * 2. Асинхронно загружает все связанные бинарные буферы.
- * 3. Парсит материалы (с ограничениями).
- * 4. Рекурсивно строит граф сцены из узлов (nodes).
- * 5. Для каждого узла с мешем парсит геометрию, извлекая данные из буферов через `accessors` и `bufferViews`.
- * 6. Опционально корректирует ориентацию модели из Y-up в Z-up.
+ * Поддерживает как стандартный `.gltf` (JSON + бинарные файлы), так и бинарный `.glb` формат.
  */
 export class GLTFLoader {
   /**
-   * Асинхронно загружает и парсит glTF файл, создавая из него сцену.
+   * Асинхронно загружает и парсит glTF или GLB файл, создавая из него сцену.
    *
-   * @param url - Путь к файлу `.gltf`.
+   * @param url - Путь к файлу `.gltf` или `.glb`.
    * @param options - Опции загрузки.
    * @returns Promise, который разрешается с объектом, содержащим готовую для рендеринга {@link Scene}.
-   * @throws Если не удается загрузить файл или его бинарные зависимости.
+   * @throws Если не удается загрузить файл, он имеет неверный формат или его зависимости не найдены.
    *
    * @example
    * ```ts
    * const loader = new GLTFLoader();
-   * // Загрузка с преобразованием осей (по умолчанию)
-   * const { scene } = await loader.load('./models/MyModel.gltf');
-   *
-   * // Загрузка без преобразования осей
+   * // Загрузка GLB с преобразованием осей (по умолчанию)
+   * const { scene } = await loader.load('./models/MyModel.glb');
+   * 
+   * // Загрузка GLTF без преобразования осей
    * const { scene: rawScene } = await loader.load('./models/MyModel.gltf', { convertToZUp: false });
-   *
+   * 
    * renderer.render(scene, camera);
    * ```
    */
@@ -177,20 +177,31 @@ export class GLTFLoader {
     const { convertToZUp = true } = options ?? {}
 
     const response = await fetch(url)
-    const gltf = (await response.json()) as GLTF
+    const arrayBuffer = await response.arrayBuffer()
 
-    const baseUri = url.substring(0, url.lastIndexOf("/") + 1)
+    let gltf: GLTF
+    let buffers: ArrayBuffer[]
 
-    const buffers = await this.loadBuffers(gltf, baseUri)
+    const dataView = new DataView(arrayBuffer)
+    // Проверяем "магическое" число в заголовке, чтобы определить, является ли файл бинарным (GLB)
+    if (dataView.getUint32(0, true) === GLB_MAGIC) {
+      const glbResult = this.parseGLB(arrayBuffer)
+      gltf = glbResult.gltf
+      buffers = glbResult.buffers
+    } else {
+      // Если это не GLB, предполагаем, что это стандартный текстовый GLTF
+      const textDecoder = new TextDecoder('utf-8')
+      gltf = JSON.parse(textDecoder.decode(arrayBuffer)) as GLTF
+      const baseUri = url.substring(0, url.lastIndexOf("/") + 1)
+      buffers = await this.loadExternalBuffers(gltf, baseUri)
+    }
+
     const materials = this.parseMaterials(gltf)
-
     const scene = new Scene()
     let parentNode: Object3D = scene
 
-    // Если флаг convertToZUp установлен, создаем узел-обертку для преобразования координат.
     if (convertToZUp) {
       const modelWrapper = new Object3D()
-      // Поворот на 90 градусов по оси X преобразует систему Y-up в Z-up.
       modelWrapper.rotation = new Vector3(Math.PI / 2, 0, 0)
       modelWrapper.updateMatrix()
       scene.add(modelWrapper)
@@ -202,7 +213,6 @@ export class GLTFLoader {
       for (const nodeIndex of sceneDef.nodes) {
         const node = this.parseNode(gltf, nodeIndex, buffers, materials)
         if (node) {
-          // Добавляем узел либо в сцену напрямую, либо в узел-обертку.
           parentNode.add(node)
         }
       }
@@ -212,13 +222,69 @@ export class GLTFLoader {
   }
 
   /**
-   * Загружает все бинарные буферы, перечисленные в glTF.
+   * Парсит бинарный контейнер GLB, извлекая из него JSON-часть и бинарный чанк.
+   * @param data - ArrayBuffer с содержимым .glb файла.
+   * @returns Объект, содержащий распарсенный JSON (`gltf`) и массив с бинарным буфером (`buffers`).
+   * @throws Если структура GLB некорректна.
+   */
+  private parseGLB(data: ArrayBuffer): { gltf: GLTF; buffers: ArrayBuffer[] } {
+    const dataView = new DataView(data)
+    const magic = dataView.getUint32(0, true)
+
+    if (magic !== GLB_MAGIC) {
+      throw new Error("Invalid GLB file: incorrect magic number.")
+    }
+
+    const version = dataView.getUint32(4, true)
+    if (version !== 2) {
+      throw new Error(`Unsupported GLB version: ${version}. Only version 2 is supported.`)
+    }
+
+    let jsonChunkData: ArrayBuffer | null = null
+    let binChunkData: ArrayBuffer | null = null
+
+    let chunkOffset = 12 // Пропускаем 12-байтный заголовок
+    while (chunkOffset < data.byteLength) {
+      const chunkLength = dataView.getUint32(chunkOffset, true)
+      const chunkType = dataView.getUint32(chunkOffset + 4, true)
+      const chunkDataStart = chunkOffset + 8
+      const chunkData = data.slice(chunkDataStart, chunkDataStart + chunkLength)
+
+      if (chunkType === JSON_CHUNK_TYPE) {
+        jsonChunkData = chunkData
+      } else if (chunkType === BIN_CHUNK_TYPE) {
+        binChunkData = chunkData
+      }
+
+      chunkOffset = chunkDataStart + chunkLength
+    }
+
+    if (!jsonChunkData) {
+      throw new Error("Invalid GLB file: JSON chunk not found.")
+    }
+
+    const textDecoder = new TextDecoder('utf-8')
+    const gltf = JSON.parse(textDecoder.decode(jsonChunkData)) as GLTF
+
+    const buffers: ArrayBuffer[] = []
+    if (binChunkData) {
+      buffers.push(binChunkData)
+    }
+
+    return { gltf, buffers }
+  }
+
+  /**
+   * Загружает все внешние бинарные буферы, перечисленные в `.gltf` файле.
    * @throws Если размер загруженного буфера не совпадает с `byteLength` из спецификации.
    */
-  private async loadBuffers(gltf: GLTF, baseUri: string): Promise<ArrayBuffer[]> {
+  private async loadExternalBuffers(gltf: GLTF, baseUri: string): Promise<ArrayBuffer[]> {
     const promises: Promise<ArrayBuffer>[] = []
     if (gltf.buffers) {
       for (const bufferInfo of gltf.buffers) {
+        if (!bufferInfo.uri) {
+          throw new Error("Buffer URI is missing for external buffer.")
+        }
         promises.push(
           fetch(baseUri + bufferInfo.uri)
             .then((res) => res.arrayBuffer())
@@ -237,7 +303,6 @@ export class GLTFLoader {
   /**
    * Парсит материалы из glTF.
    * **Ограничение:** В текущей реализации создается `MeshLambertMaterial` и используется только `baseColorFactor`.
-   * PBR-свойства, такие как metallic/roughness и текстуры, игнорируются.
    */
   private parseMaterials(gltf: GLTF): MeshLambertMaterial[] {
     const materials: MeshLambertMaterial[] = []
@@ -256,7 +321,6 @@ export class GLTFLoader {
 
   /**
    * Рекурсивно парсит узел сцены (node) и всех его потомков.
-   * Применяет трансформации и создает меши.
    */
   private parseNode(
     gltf: GLTF,
@@ -313,13 +377,6 @@ export class GLTFLoader {
 
   /**
    * Парсит геометрию примитива, извлекая вершинные данные из буферов.
-   *
-   * **Внутренняя логика**
-   * 1. Итерирует по атрибутам (`POSITION`, `NORMAL`, etc.).
-   * 2. Находит соответствующий `accessor`, затем `bufferView` для получения смещения и длины.
-   * 3. Создает типизированный массив (`TypedArray`) нужного типа и размера, который является "окном" в большой бинарный буфер.
-   * 4. Создает `BufferAttribute` и устанавливает его для геометрии.
-   * 5. Если нормали не предоставлены, но есть индексы, пытается вычислить их автоматически.
    */
   private parseGeometry(gltf: GLTF, primitive: GLTFPrimitive, buffers: ArrayBuffer[]): BufferGeometry {
     const geometry = new BufferGeometry()
@@ -342,7 +399,7 @@ export class GLTFLoader {
           count * itemSize
         )
 
-        const attributeNameLower = attributeName.toLowerCase() as "position" | "normal"
+        const attributeNameLower = attributeName.toLowerCase() as 'position' | 'normal';
         geometry.setAttribute(attributeNameLower, new BufferAttribute(array, itemSize))
       }
     }
