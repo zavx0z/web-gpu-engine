@@ -529,7 +529,7 @@ export class Renderer {
     }
 
     if (indexBuffer) {
-      const indexFormat = mesh.geometry.index!.array.length > 65535 ? "uint32" : "uint16"
+      const indexFormat = mesh.geometry.index!.array instanceof Uint32Array ? "uint32" : "uint16"
       passEncoder.setIndexBuffer(indexBuffer, indexFormat)
       passEncoder.drawIndexed(mesh.geometry.index!.count)
     } else {
