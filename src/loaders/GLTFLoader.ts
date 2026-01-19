@@ -177,12 +177,19 @@ export class GLTFLoader {
     const { convertToZUp = true } = options ?? {}
 
     const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`Failed to load ${url}: ${response.status} ${response.statusText}`)
+    }
+
     const arrayBuffer = await response.arrayBuffer()
+    if (arrayBuffer.byteLength < 4) {
+      throw new Error(`File is too short or empty: ${url}`)
+    }
 
     let gltf: GLTF
     let buffers: ArrayBuffer[]
-
     const dataView = new DataView(arrayBuffer)
+
     // Проверяем "магическое" число в заголовке, чтобы определить, является ли файл бинарным (GLB)
     if (dataView.getUint32(0, true) === GLB_MAGIC) {
       const glbResult = this.parseGLB(arrayBuffer)
@@ -244,7 +251,8 @@ export class GLTFLoader {
     let binChunkData: ArrayBuffer | null = null
 
     let chunkOffset = 12 // Пропускаем 12-байтный заголовок
-    while (chunkOffset < data.byteLength) {
+
+    while (chunkOffset + 8 <= data.byteLength) {
       const chunkLength = dataView.getUint32(chunkOffset, true)
       const chunkType = dataView.getUint32(chunkOffset + 4, true)
       const chunkDataStart = chunkOffset + 8

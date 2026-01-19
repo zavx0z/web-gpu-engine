@@ -17,6 +17,7 @@ Bun.serve({
     "/models/bots.glb": file("./static/models/bots.glb"),
     "/models/engine.gltf": file("./static/engine.gltf"),
     "/models/engine.bin": file("./static/engine.bin"),
+    "/models/engine.glb": file("./static/engine.glb"),
     // "/gl-matrix.js": new Response(Bun.file("./gl-matrix.js"), {
     //   headers: {
     //     "Content-Type": "application/javascript",
