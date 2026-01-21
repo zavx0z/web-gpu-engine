@@ -94,6 +94,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       mixer.update(delta);
     }
 
+    scene.updateWorldMatrix();
     renderer.render(scene, viewPoint)
   }
 

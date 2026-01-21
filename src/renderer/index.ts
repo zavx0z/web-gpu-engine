@@ -359,7 +359,7 @@ export class Renderer {
 
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
-    collectSceneObjects(scene, new Matrix4(), renderList, lightList)
+    collectSceneObjects(scene, renderList, lightList)
 
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
 

@@ -20,13 +20,12 @@ export interface LightItem {
 
 export function collectSceneObjects(
   object: Object3D,
-  parentWorldMatrix: Matrix4,
   renderList: RenderItem[],
   lights: LightItem[]
 ): void {
   if (!object.visible) return
 
-  const worldMatrix = new Matrix4().multiplyMatrices(parentWorldMatrix, object.modelMatrix)
+  const worldMatrix = object.matrixWorld;
 
   if (object instanceof Mesh) { // SkinnedMesh is also an instance of Mesh
     renderList.push({ type: "mesh", object, worldMatrix })
@@ -40,6 +39,6 @@ export function collectSceneObjects(
   }
 
   for (const child of object.children) {
-    collectSceneObjects(child, worldMatrix, renderList, lights)
+    collectSceneObjects(child, renderList, lights);
   }
 }

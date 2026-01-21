@@ -16,6 +16,7 @@ export class Object3D {
   public parent: Object3D | null = null
   public position: Vector3 = new Vector3()
   public quaternion: Quaternion = new Quaternion()
+
   // Внутреннее свойство для хранения вращения в углах Эйлера.
   private _rotation: Vector3 = new Vector3()
 
@@ -38,6 +39,7 @@ export class Object3D {
    * Локальная матрица преобразования объекта.
    */
   public modelMatrix: Matrix4 = new Matrix4()
+  public matrixWorld: Matrix4 = new Matrix4()
 
   public children: Object3D[] = []
 
@@ -61,14 +63,12 @@ export class Object3D {
 
   public getObjectByName(name: string): Object3D | undefined {
     if (this.name === name) return this;
-
     for (const child of this.children) {
         const object = child.getObjectByName(name);
         if (object !== undefined) {
             return object;
         }
     }
-
     return undefined;
   }
 
@@ -86,5 +86,19 @@ export class Object3D {
   public updateMatrix(): void {
     this.quaternion.setFromEuler(this.rotation.x, this.rotation.y, this.rotation.z);
     this.modelMatrix.compose(this.position, this.quaternion, this.scale);
+  }
+
+  public updateWorldMatrix(force: boolean = false): void {
+    this.updateMatrix();
+
+    if (this.parent) {
+      this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.modelMatrix);
+    } else {
+      this.matrixWorld.copy(this.modelMatrix);
+    }
+
+    for (const child of this.children) {
+      child.updateWorldMatrix(force);
+    }
   }
 }
