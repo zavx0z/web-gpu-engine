@@ -11,11 +11,11 @@ import { LineBasicMaterial } from "../materials/LineBasicMaterial"
 import { Vector3 } from "../math/Vector3"
 import { Text } from "../objects/Text"
 import { TextMaterial } from "../materials/TextMaterial"
-
 import meshShaderCode from "./shaders/mesh.wgsl" with { type: "text" }
-import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
-import textShaderCode from "./shaders/text.wgsl" with { type: "text" }
 
+import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
+
+import textShaderCode from "./shaders/text.wgsl" with { type: "text" }
 import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
 
 // --- Константы для uniform-буферов ---
@@ -23,7 +23,6 @@ const UNIFORM_ALIGNMENT = 256
 const MAX_RENDERABLES = 1000
 const MAX_LIGHTS = 4 // Максимальное количество источников света
 
-// Размер данных для одного объекта: mat4x4 (64) + mat4x4 (64) + vec4 (16)
 // Размер данных для одного объекта: mat4x4 (64) + mat4x4 (64) + vec4 (16) + u32 (4) + 3*padding(12) = 160. Выравниваем до 256.
 const PER_OBJECT_UNIFORM_SIZE = Math.ceil((64 + 64 + 16 + 4) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT;
 const MAX_BONES = 128;
@@ -69,13 +68,12 @@ export class Renderer {
   // --- Ресурсы для каждого объекта ---
   private perObjectUniformBuffer: GPUBuffer | null = null
   private perObjectBindGroup: GPUBindGroup | null = null
-  private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
 
+  private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
   private depthTexture: GPUTexture | null = null
   private multisampleTexture: GPUTexture | null = null
   private sampleCount = 4 // MSAA
   private pixelRatio = 1
-
   public canvas: HTMLCanvasElement | null = null
 
   /**
@@ -85,12 +83,14 @@ export class Renderer {
    */
   public async init(): Promise<void> {
     if (!navigator.gpu) throw new Error("WebGPU не поддерживается.")
+
     const adapter = await navigator.gpu.requestAdapter()
     if (!adapter) throw new Error("Не удалось получить WebGPU адаптер.")
 
     this.device = await adapter.requestDevice()
     this.canvas = document.createElement("canvas")
     this.context = this.canvas.getContext("webgpu")
+
     if (!this.context) throw new Error("Не удалось получить WebGPU контекст.")
 
     this.presentationFormat = navigator.gpu.getPreferredCanvasFormat()
@@ -186,11 +186,9 @@ export class Renderer {
     const meshShaderModule = this.device.createShaderModule({
       code: meshShaderCode,
     })
-
     const lineShaderModule = this.device.createShaderModule({
       code: lineShaderCode,
     })
-
     const textShaderModule = this.device.createShaderModule({
       code: textShaderCode,
     })
@@ -357,12 +355,10 @@ export class Renderer {
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 
     const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
-
     this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
 
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
-
     collectSceneObjects(scene, new Matrix4(), renderList, lightList)
 
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
@@ -428,7 +424,6 @@ export class Renderer {
     }
 
     passEncoder.end()
-
     this.device.queue.submit([commandEncoder.finish()])
   }
 
@@ -443,10 +438,10 @@ export class Renderer {
 
     float32View.set(viewMatrix.elements, 0)
     float32View.set(viewNormalMatrix.elements, 16)
+
     uint32View[32] = Math.min(lights.length, MAX_LIGHTS)
 
     const lightsArrayOffset = 36
-
     for (let i = 0; i < uint32View[32]; i++) {
       const lightItem = lights[i]
       const light = lightItem.light
@@ -458,7 +453,6 @@ export class Renderer {
       const viewLightPos = worldLightPos.applyMatrix4(viewMatrix)
 
       const currentLightOffset = lightsArrayOffset + i * (LIGHT_STRUCT_SIZE / 4)
-
       float32View.set([viewLightPos.x, viewLightPos.y, viewLightPos.z, 1.0], currentLightOffset)
 
       float32View.set([light.color.r, light.color.g, light.color.b, light.intensity], currentLightOffset + 4)
@@ -492,18 +486,19 @@ export class Renderer {
     }
 
     let skinIndexBuffer: GPUBuffer | undefined;
-    if (geometry.attributes.skinIndex) {
+    if (geometry.attributes.skinIndex && geometry.attributes.skinIndex.array.length > 0) {
       skinIndexBuffer = this.device.createBuffer({
         size: (geometry.attributes.skinIndex.array.byteLength + 3) & ~3,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
         mappedAtCreation: true,
       });
-      new Uint16Array(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array);
+      const SourceTypedArray = geometry.attributes.skinIndex.array.constructor as any;
+      new SourceTypedArray(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array);
       skinIndexBuffer.unmap();
     }
 
     let skinWeightBuffer: GPUBuffer | undefined;
-    if (geometry.attributes.skinWeight) {
+    if (geometry.attributes.skinWeight && geometry.attributes.skinWeight.array.length > 0) {
       skinWeightBuffer = this.device.createBuffer({
         size: (geometry.attributes.skinWeight.array.byteLength + 3) & ~3,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -563,6 +558,7 @@ export class Renderer {
     const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
     objectDataFloat32.set(worldMatrix.elements, 0) // modelMatrix
     objectDataFloat32.set(normalMatrix.elements, 16) // normalMatrix
+
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
       objectDataFloat32.set(material.color.toArray(), 32)
     }
@@ -579,8 +575,6 @@ export class Renderer {
       this.device.queue.writeBuffer(this.perObjectUniformBuffer, boneMatricesOffset, skeleton.boneMatrices);
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
     } else {
-      // Для не-скиннингованных мешей можно не устанавливать второй offset или установить его в 0
-      // Но для консистентности лучше передавать валидный offset, даже если он не будет использоваться
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
     }
 
@@ -617,10 +611,10 @@ export class Renderer {
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
     const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
     objectData.set(worldMatrix.elements, 0)
-
     this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
 
-    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset])
+    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
 
     const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
@@ -645,19 +639,20 @@ export class Renderer {
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
     const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
     objectData.set(worldMatrix.elements, 0)
+
     if (!isStencil) {
       objectData.set((text.material as TextMaterial).color.toArray(), 32)
     }
-
     this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
-    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset])
+
+    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
 
     const { positionBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(geometry)
-    passEncoder.setVertexBuffer(0, positionBuffer)
 
+    passEncoder.setVertexBuffer(0, positionBuffer)
     const indexFormat = geometry.index.array instanceof Uint32Array ? "uint32" : "uint16"
     passEncoder.setIndexBuffer(indexBuffer!, indexFormat)
-
     passEncoder.drawIndexed(geometry.index.count)
   }
 
@@ -674,12 +669,14 @@ export class Renderer {
       if (this.multisampleTexture) this.multisampleTexture.destroy()
 
       const size = { width: this.canvas.width, height: this.canvas.height }
+
       this.depthTexture = this.device.createTexture({
         size,
         format: "depth24plus-stencil8",
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
         sampleCount: this.sampleCount,
       })
+
       this.multisampleTexture = this.device.createTexture({
         size,
         format: this.presentationFormat,

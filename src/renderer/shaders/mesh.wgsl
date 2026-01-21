@@ -44,7 +44,12 @@ fn vs_main(
     @location(3) skinWeight: vec4<f32>
 ) -> VertexOutput {
     var out: VertexOutput;
-    var skinMatrix = mat4x4<f32>(); // Identity matrix
+    var skinMatrix = mat4x4<f32>(
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    );
 
     if (perObject.isSkinned == 1u) {
         skinMatrix =
@@ -52,13 +57,6 @@ fn vs_main(
             skin.boneMatrices[skinIndex.y] * skinWeight.y +
             skin.boneMatrices[skinIndex.z] * skinWeight.z +
             skin.boneMatrices[skinIndex.w] * skinWeight.w;
-    } else {
-        skinMatrix = mat4x4<f32>(
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0
-        );
     }
 
     let skinnedPosition = skinMatrix * vec4<f32>(pos, 1.0);

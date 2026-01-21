@@ -1,19 +1,3 @@
-/**
- * @packageDocumentation
- * @module GLTFLoader
- * 
- * Модуль для загрузки и парсинга 3D-моделей в формате glTF 2.0.
- * Поддерживает как стандартный формат (`.gltf` + `.bin`), так и бинарный (`.glb`).
- * 
- * **Архитектура**
- * - **GLTFLoader**: Основной класс, управляющий процессом загрузки.
- * - **Универсальный метод `load`**: Автоматически определяет формат файла (JSON или бинарный) и вызывает соответствующий парсер.
- * - **Асинхронная загрузка**: Для `.gltf` сначала загружается JSON, затем параллельно подгружаются все необходимые бинарные буферы. Для `.glb` все загружается одним запросом.
- * - **Рекурсивный парсинг**: Сцена строится путем рекурсивного обхода графа узлов (`nodes`) из glTF.
- * - **Преобразование координат**: Загрузчик может автоматически применять трансформацию для преобразования системы координат glTF (Y-up) в систему координат движка (Z-up). Это поведение управляется флагом.
- * - **Ограниченная поддержка материалов**: В текущей реализации парсер материалов создает `MeshLambertMaterial`, используя только `baseColorFactor`.
- */
-
 import { Object3D } from "../core/Object3D"
 import { Scene } from "../scenes/Scene"
 import { Vector3 } from "../math/Vector3"
@@ -375,7 +359,6 @@ export class GLTFLoader {
       const skeleton = skeletons[nodeDef.skin]
       if (!node || !skeleton) continue;
 
-      const newChildren: Object3D[] = []
       node.traverse((child) => {
         if (child instanceof Mesh) {
             const parent = child.parent;
@@ -494,4 +477,3 @@ export class GLTFLoader {
     }
   }
 }
-
