@@ -11,9 +11,7 @@ import {
   Text,
   TrueTypeFont,
   TextMaterial,
-  AnimationMixer,
-  Object3D,
-  SkinnedMesh
+  AnimationMixer
 } from "../src"
 
 document.addEventListener("DOMContentLoaded", async () => {
