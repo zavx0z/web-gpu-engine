@@ -62,8 +62,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   let mixer: AnimationMixer | null = null;
   if (gltf.animations.length > 0) {
     mixer = new AnimationMixer(gltf.scene);
-    gltf.animations.forEach((clip) => {
-      mixer!.clipAction(clip).play();
+    // The loader wraps content in a Z-up object (children[0]).
+    // The actual GLTF root nodes (the bots) are children of this wrapper.
+    const modelRoot = gltf.scene.children[0];
+    
+    gltf.animations.forEach((clip, index) => {
+      // Bind Animation 0 -> Object 0, Animation 1 -> Object 1, etc.
+      const localRoot = (modelRoot && modelRoot.children[index]) ? modelRoot.children[index] : gltf.scene;
+      const action = mixer!.clipAction(clip, localRoot);
+      action.play();
     });
   }
 
