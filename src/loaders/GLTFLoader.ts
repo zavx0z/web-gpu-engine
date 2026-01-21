@@ -277,7 +277,7 @@ export class GLTFLoader {
 
       if (nodeDef.matrix) {
         node.modelMatrix.elements.set(nodeDef.matrix)
-        // Decompose matrix to get position, quaternion, scale
+        node.modelMatrix.decompose(node.position, node.quaternion, node.scale)
       } else {
         if (nodeDef.translation) {
           node.position.set(nodeDef.translation[0], nodeDef.translation[1], nodeDef.translation[2])

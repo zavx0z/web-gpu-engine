@@ -262,7 +262,61 @@ export class Matrix4 {
 	/**
 	 * Создает матрицу вращения из кватерниона.
 	 */
-	public makeRotationFromQuaternion(q: Quaternion): this {
-		return this.compose(new Vector3(0, 0, 0), q, new Vector3(1, 1, 1))
-	}
+  public makeRotationFromQuaternion(q: Quaternion): this {
+    return this.compose(new Vector3(0, 0, 0), q, new Vector3(1, 1, 1))
+  }
+
+  public decompose(position: Vector3, quaternion: Quaternion, scale: Vector3): void {
+    const te = this.elements
+
+    let sx = new Vector3(te[0], te[1], te[2]).length()
+    const sy = new Vector3(te[4], te[5], te[6]).length()
+    const sz = new Vector3(te[8], te[9], te[10]).length()
+
+    const det = this.determinant()
+    if (det < 0) sx = -sx
+
+    position.x = te[12]
+    position.y = te[13]
+    position.z = te[14]
+
+    const matrix = new Matrix4().copy(this)
+
+    const invSX = 1 / sx
+    const invSY = 1 / sy
+    const invSZ = 1 / sz
+
+    matrix.elements[0] *= invSX
+    matrix.elements[1] *= invSX
+    matrix.elements[2] *= invSX
+
+    matrix.elements[4] *= invSY
+    matrix.elements[5] *= invSY
+    matrix.elements[6] *= invSY
+
+    matrix.elements[8] *= invSZ
+    matrix.elements[9] *= invSZ
+    matrix.elements[10] *= invSZ
+
+    quaternion.setFromRotationMatrix(matrix)
+
+    scale.x = sx
+    scale.y = sy
+    scale.z = sz
+  }
+
+  public determinant(): number {
+    const te = this.elements
+    const n11 = te[0], n12 = te[4], n13 = te[8], n14 = te[12]
+    const n21 = te[1], n22 = te[5], n23 = te[9], n24 = te[13]
+    const n31 = te[2], n32 = te[6], n33 = te[10], n34 = te[14]
+    const n41 = te[3], n42 = te[7], n43 = te[11], n44 = te[15]
+
+    return (
+      n41 * (+n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34) +
+      n42 * (+n11 * n23 * n34 - n11 * n24 * n33 + n14 * n21 * n33 - n13 * n21 * n34 + n13 * n24 * n31 - n14 * n23 * n31) +
+      n43 * (+n11 * n24 * n32 - n11 * n22 * n34 - n14 * n21 * n32 + n12 * n21 * n34 + n14 * n22 * n31 - n12 * n24 * n31) +
+      n44 * (-n13 * n22 * n31 - n11 * n23 * n32 + n11 * n22 * n33 + n13 * n21 * n32 - n12 * n21 * n33 + n12 * n23 * n31)
+    )
+  }
 }
