@@ -37,8 +37,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const viewPoint = new ViewPoint({
     element: renderer.canvas,
     fov: (2 * Math.PI) / 5,
-    position: { x: 2, y: -3, z: 1.5 },
-    target: { x: 0, y: 0, z: 0.5 },
+    position: { x: 2, y: -1.5, z: 1.5 },
+    target: { x: 0, y: 0, z: 1 },
     near: .1,
     far: 100,
   })
@@ -70,8 +70,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const font = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
     const text = new Text("WebGPU Engine", font, 0.2, new TextMaterial({ color: new Color(1.0, 1.0, 1.0) }))
-    text.rotation.x = Math.PI / 2
-    text.position.set(-0.8, 0, 1.5)
+    // text.rotation.x = Math.PI / 2
+    text.position.set(-0.8, 0, 0)
     text.updateMatrix()
     scene.add(text)
   } catch (e) {
