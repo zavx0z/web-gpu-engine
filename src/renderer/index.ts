@@ -265,7 +265,7 @@ export class Renderer {
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: {
         depthWriteEnabled: false,
-        depthCompare: "always",
+        depthCompare: "less",
         format: "depth24plus-stencil8",
         stencilFront: { compare: "always", failOp: "keep", depthFailOp: "keep", passOp: "increment-wrap" },
         stencilBack: { compare: "always", failOp: "keep", depthFailOp: "keep", passOp: "decrement-wrap" },
@@ -288,7 +288,7 @@ export class Renderer {
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: {
         depthWriteEnabled: false,
-        depthCompare: "always",
+        depthCompare: "less",
         format: "depth24plus-stencil8",
         stencilFront: { compare: "not-equal", failOp: "keep", depthFailOp: "keep", passOp: "keep" },
         stencilBack: { compare: "not-equal", failOp: "keep", depthFailOp: "keep", passOp: "keep" },
