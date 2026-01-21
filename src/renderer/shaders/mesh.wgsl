@@ -44,19 +44,22 @@ fn vs_main(
     @location(3) skinWeight: vec4<f32>
 ) -> VertexOutput {
     var out: VertexOutput;
-    var skinMatrix = mat4x4<f32>(); // Zero matrix
+    var worldPosition: vec4<f32>;
+    var worldNormal: vec3<f32>;
+
     if (perObject.isSkinned == 1u) {
-        skinMatrix =
+        let skinMatrix = 
             skin.boneMatrices[skinIndex.x] * skinWeight.x +
             skin.boneMatrices[skinIndex.y] * skinWeight.y +
             skin.boneMatrices[skinIndex.z] * skinWeight.z +
             skin.boneMatrices[skinIndex.w] * skinWeight.w;
-    } else {
-        skinMatrix = perObject.modelMatrix;
-    }
 
-    let worldPosition = skinMatrix * vec4<f32>(pos, 1.0);
-    let worldNormal = (skinMatrix * vec4<f32>(normal, 0.0)).xyz;
+        worldPosition = skinMatrix * vec4<f32>(pos, 1.0);
+        worldNormal = (skinMatrix * vec4<f32>(normal, 0.0)).xyz;
+    } else {
+        worldPosition = perObject.modelMatrix * vec4<f32>(pos, 1.0);
+        worldNormal = (perObject.normalMatrix * vec4<f32>(normal, 0.0)).xyz;
+    }
 
     out.position = globalUniforms.viewProjectionMatrix * worldPosition;
     out.viewPosition = (sceneUniforms.viewMatrix * worldPosition).xyz;

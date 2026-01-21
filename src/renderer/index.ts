@@ -572,7 +572,7 @@ export class Renderer {
 
     if (isSkinned) {
       const skeleton = (mesh as SkinnedMesh).skeleton;
-      this.device.queue.writeBuffer(this.perObjectUniformBuffer, boneMatricesOffset, skeleton.boneMatrices);
+this.device.queue.writeBuffer(this.perObjectUniformBuffer, boneMatricesOffset, skeleton.boneMatrices.buffer, skeleton.boneMatrices.byteOffset, skeleton.boneMatrices.byteLength);
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
     } else {
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
