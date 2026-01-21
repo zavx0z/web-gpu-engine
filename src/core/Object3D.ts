@@ -18,7 +18,24 @@ export class Object3D {
   public quaternion: Quaternion = new Quaternion()
 
   // Внутреннее свойство для хранения вращения в углах Эйлера.
-  private _rotation: Vector3 = new Vector3()
+  private _rotation: Vector3
+
+  constructor() {
+    this._rotation = this._createRotationProxy(new Vector3())
+  }
+
+  private _createRotationProxy(v: Vector3): Vector3 {
+    return new Proxy(v, {
+      set: (target, property, value, receiver) => {
+        // @ts-ignore
+        const success = Reflect.set(target, property, value, receiver)
+        if (success && (property === 'x' || property === 'y' || property === 'z')) {
+          this.quaternion.setFromEuler(target.x, target.y, target.z)
+        }
+        return success
+      },
+    })
+  }
 
   /**
    * Вращение объекта в радианах в виде углов Эйлера {x, y, z}.
@@ -29,7 +46,7 @@ export class Object3D {
   }
 
   set rotation(value: Vector3) {
-    this._rotation = value
+    this._rotation = this._createRotationProxy(value)
     this.quaternion.setFromEuler(value.x, value.y, value.z)
   }
 
