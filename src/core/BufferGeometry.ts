@@ -3,7 +3,7 @@ import { Vector3 } from "../math/Vector3"
 /**
  * Типы TypedArray, которые можно использовать в BufferAttribute.
  */
-type TypedArray = Float32Array | Uint32Array | Uint16Array | Uint8Array | Int32Array | Int16Array | Int8Array
+export type TypedArray = Float32Array | Uint32Array | Uint16Array | Uint8Array | Int32Array | Int16Array | Int8Array
 
 /**
  * Хранит сырые данные для одного атрибута геометрии.

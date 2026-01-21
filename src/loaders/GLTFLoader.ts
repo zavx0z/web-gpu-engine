@@ -2,7 +2,7 @@ import { Object3D } from "../core/Object3D"
 import { Scene } from "../scenes/Scene"
 import { Vector3 } from "../math/Vector3"
 import { Mesh } from "../core/Mesh"
-import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
+import { BufferAttribute, BufferGeometry, TypedArray } from "../core/BufferGeometry"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Color } from "../math/Color"
 import { SkinnedMesh } from "../core/SkinnedMesh"
@@ -412,7 +412,7 @@ export class GLTFLoader {
 
     for (const [attributeName, accessorIndex] of Object.entries(primitive.attributes)) {
       const accessor = gltf.accessors![accessorIndex]
-      const data = this.getAccessorData(gltf, accessor, buffers) as any
+      const data = this.getAccessorData(gltf, accessor, buffers)
       const itemSize = this.getItemSize(accessor.type)
       let bufferName: string;
       let finalData = data;
@@ -457,7 +457,7 @@ export class GLTFLoader {
     return geometry
   }
 
-  private getAccessorData(gltf: GLTF, accessor: GLTFAccessor, buffers: ArrayBuffer[]): ArrayBufferView {
+  private getAccessorData(gltf: GLTF, accessor: GLTFAccessor, buffers: ArrayBuffer[]): TypedArray {
     const bufferView = gltf.bufferViews![accessor.bufferView!]
     const buffer = buffers[bufferView.buffer]
     const componentType = accessor.componentType
