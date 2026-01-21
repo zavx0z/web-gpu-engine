@@ -59,14 +59,19 @@ fn vs_main(
             skin.boneMatrices[skinIndex.w] * skinWeight.w;
     }
 
-    let skinnedPosition = skinMatrix * vec4<f32>(pos, 1.0);
-    let worldPosition = perObject.modelMatrix * skinnedPosition;
-    out.position = globalUniforms.viewProjectionMatrix * worldPosition;
-    
-    out.viewPosition = (sceneUniforms.viewMatrix * worldPosition).xyz;
+    var worldPosition: vec4<f32>;
+    var worldNormal: vec3<f32>;
 
-    let skinnedNormal = skinMatrix * vec4<f32>(normal, 0.0);
-    let worldNormal = (perObject.normalMatrix * skinnedNormal).xyz;
+    if (perObject.isSkinned == 1u) {
+        worldPosition = skinMatrix * vec4<f32>(pos, 1.0);
+        worldNormal = (skinMatrix * vec4<f32>(normal, 0.0)).xyz;
+    } else {
+        worldPosition = perObject.modelMatrix * vec4<f32>(pos, 1.0);
+        worldNormal = (perObject.normalMatrix * vec4<f32>(normal, 0.0)).xyz;
+    }
+
+    out.position = globalUniforms.viewProjectionMatrix * worldPosition;
+    out.viewPosition = (sceneUniforms.viewMatrix * worldPosition).xyz;
     out.viewNormal = (sceneUniforms.viewNormalMatrix * vec4<f32>(worldNormal, 0.0)).xyz;
 
     return out;

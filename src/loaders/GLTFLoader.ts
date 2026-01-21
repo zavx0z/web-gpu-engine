@@ -412,19 +412,36 @@ export class GLTFLoader {
 
     for (const [attributeName, accessorIndex] of Object.entries(primitive.attributes)) {
       const accessor = gltf.accessors![accessorIndex]
-      const data = this.getAccessorData(gltf, accessor, buffers)
+      const data = this.getAccessorData(gltf, accessor, buffers) as any
       const itemSize = this.getItemSize(accessor.type)
-
       let bufferName: string;
+      let finalData = data;
+
       switch (attributeName) {
         case 'POSITION': bufferName = 'position'; break;
         case 'NORMAL': bufferName = 'normal'; break;
-        case 'JOINTS_0': bufferName = 'skinIndex'; break;
-        case 'WEIGHTS_0': bufferName = 'skinWeight'; break;
+        case 'JOINTS_0': 
+          bufferName = 'skinIndex'; 
+          if (data instanceof Uint8Array) {
+            finalData = new Uint16Array(data);
+          }
+          break;
+        case 'WEIGHTS_0': 
+          bufferName = 'skinWeight'; 
+          if (data instanceof Uint8Array) {
+            finalData = new Float32Array(data.length);
+            const s = 1.0 / 255.0;
+            for (let i = 0; i < data.length; i++) finalData[i] = data[i] * s;
+          } else if (data instanceof Uint16Array) {
+            finalData = new Float32Array(data.length);
+            const s = 1.0 / 65535.0;
+            for (let i = 0; i < data.length; i++) finalData[i] = data[i] * s;
+          }
+          break;
         default: continue;
       }
 
-      geometry.setAttribute(bufferName, new BufferAttribute(data, itemSize))
+      geometry.setAttribute(bufferName, new BufferAttribute(finalData, itemSize))
     }
 
     if (primitive.indices !== undefined) {

@@ -493,7 +493,7 @@ export class Renderer {
         mappedAtCreation: true,
       });
       const SourceTypedArray = geometry.attributes.skinIndex.array.constructor as any;
-      new SourceTypedArray(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array);
+      new SourceTypedArray(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array as any);
       skinIndexBuffer.unmap();
     }
 
