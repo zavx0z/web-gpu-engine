@@ -84,7 +84,6 @@ export class Object3D {
    * на основе его позиции, кватерниона и масштаба.
    */
   public updateMatrix(): void {
-    this.quaternion.setFromEuler(this._rotation.x, this._rotation.y, this._rotation.z)
     this.modelMatrix.compose(this.position, this.quaternion, this.scale)
   }
 }
