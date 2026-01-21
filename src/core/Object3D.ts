@@ -12,10 +12,10 @@ import { Vector3 } from "../math/Vector3"
  * * Вращение `.rotation` / `.quaternion` применяется соответственно.
  */
 export class Object3D {
+  public name: string = ''
+  public parent: Object3D | null = null
   public position: Vector3 = new Vector3()
-
   public quaternion: Quaternion = new Quaternion()
-
   // Внутреннее свойство для хранения вращения в углах Эйлера.
   private _rotation: Vector3 = new Vector3()
 
@@ -52,7 +52,31 @@ export class Object3D {
    * @param child - Объект для добавления в качестве дочернего элемента
    */
   public add(child: Object3D): void {
+    if (child.parent) {
+      child.parent.children = child.parent.children.filter(c => c !== child);
+    }
     this.children.push(child)
+    child.parent = this
+  }
+
+  public getObjectByName(name: string): Object3D | undefined {
+    if (this.name === name) return this;
+
+    for (const child of this.children) {
+        const object = child.getObjectByName(name);
+        if (object !== undefined) {
+            return object;
+        }
+    }
+
+    return undefined;
+  }
+
+  public traverse(callback: (object: Object3D) => void) {
+    callback(this);
+    for (const child of this.children) {
+      child.traverse(callback);
+    }
   }
 
   /**

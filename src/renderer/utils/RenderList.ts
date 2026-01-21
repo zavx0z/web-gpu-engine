@@ -5,9 +5,11 @@ import { Text } from "../../objects/Text"
 import { Light } from "../../lights/Light"
 import { Matrix4 } from "../../math/Matrix4"
 
+import { SkinnedMesh } from "../../core/SkinnedMesh";
+
 export interface RenderItem {
   type: "mesh" | "line" | "text-stencil" | "text-cover"
-  object: Mesh | LineSegments | Text
+  object: Mesh | SkinnedMesh | LineSegments | Text
   worldMatrix: Matrix4
 }
 
@@ -26,7 +28,7 @@ export function collectSceneObjects(
 
   const worldMatrix = new Matrix4().multiplyMatrices(parentWorldMatrix, object.modelMatrix)
 
-  if (object instanceof Mesh) {
+  if (object instanceof Mesh) { // SkinnedMesh is also an instance of Mesh
     renderList.push({ type: "mesh", object, worldMatrix })
   } else if (object instanceof LineSegments) {
     renderList.push({ type: "line", object, worldMatrix })

@@ -1,6 +1,7 @@
 import { Scene } from "../scenes/Scene"
 import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
+import { SkinnedMesh } from "../core/SkinnedMesh"
 import { BufferGeometry } from "../core/BufferGeometry"
 import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
@@ -23,7 +24,11 @@ const MAX_RENDERABLES = 1000
 const MAX_LIGHTS = 4 // Максимальное количество источников света
 
 // Размер данных для одного объекта: mat4x4 (64) + mat4x4 (64) + vec4 (16)
-const PER_OBJECT_DATA_SIZE = Math.ceil((64 + 64 + 16) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT
+// Размер данных для одного объекта: mat4x4 (64) + mat4x4 (64) + vec4 (16) + u32 (4) + 3*padding(12) = 160. Выравниваем до 256.
+const PER_OBJECT_UNIFORM_SIZE = Math.ceil((64 + 64 + 16 + 4) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT;
+const MAX_BONES = 128;
+const BONE_MATRICES_SIZE = MAX_BONES * 16 * 4; // 128 * mat4x4<f32>
+const PER_OBJECT_DATA_SIZE = PER_OBJECT_UNIFORM_SIZE + BONE_MATRICES_SIZE;
 
 // --- Размеры и смещения для данных сцены ---
 const SCENE_UNIFORMS_SIZE = 272
@@ -35,6 +40,8 @@ interface GeometryBuffers {
   normalBuffer?: GPUBuffer
   indexBuffer?: GPUBuffer
   colorBuffer?: GPUBuffer
+  skinIndexBuffer?: GPUBuffer
+  skinWeightBuffer?: GPUBuffer
 }
 
 /**
@@ -143,6 +150,11 @@ export class Renderer {
           visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: "uniform", hasDynamicOffset: true },
         },
+        {
+          binding: 1, // for skinning
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: "uniform", hasDynamicOffset: true },
+        },
       ],
     })
 
@@ -153,7 +165,14 @@ export class Renderer {
           binding: 0,
           resource: {
             buffer: this.perObjectUniformBuffer,
-            size: PER_OBJECT_DATA_SIZE,
+            size: PER_OBJECT_UNIFORM_SIZE,
+          },
+        },
+        {
+          binding: 1,
+          resource: {
+            buffer: this.perObjectUniformBuffer,
+            size: BONE_MATRICES_SIZE,
           },
         },
       ],
@@ -183,8 +202,14 @@ export class Renderer {
         module: meshShaderModule,
         entryPoint: "vs_main",
         buffers: [
+          // position
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+          // normal
           { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+          // skinIndex
+          { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: "uint16x4" }] },
+          // skinWeight
+          { arrayStride: 16, attributes: [{ shaderLocation: 3, offset: 0, format: "float32x4" }] },
         ],
       },
       fragment: {
@@ -466,6 +491,28 @@ export class Renderer {
       normalBuffer.unmap()
     }
 
+    let skinIndexBuffer: GPUBuffer | undefined;
+    if (geometry.attributes.skinIndex) {
+      skinIndexBuffer = this.device.createBuffer({
+        size: (geometry.attributes.skinIndex.array.byteLength + 3) & ~3,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Uint16Array(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array);
+      skinIndexBuffer.unmap();
+    }
+
+    let skinWeightBuffer: GPUBuffer | undefined;
+    if (geometry.attributes.skinWeight) {
+      skinWeightBuffer = this.device.createBuffer({
+        size: (geometry.attributes.skinWeight.array.byteLength + 3) & ~3,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Float32Array(skinWeightBuffer.getMappedRange()).set(geometry.attributes.skinWeight.array);
+      skinWeightBuffer.unmap();
+    }
+
     let colorBuffer: GPUBuffer | undefined
     if (geometry.attributes.color) {
       colorBuffer = this.device.createBuffer({
@@ -494,38 +541,58 @@ export class Renderer {
       normalBuffer,
       colorBuffer,
       indexBuffer,
+      skinIndexBuffer,
+      skinWeightBuffer,
     }
 
     this.geometryCache.set(geometry, buffers)
     return buffers
   }
 
-  private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh, worldMatrix: Matrix4, renderIndex: number): void {
+  private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh | SkinnedMesh, worldMatrix: Matrix4, renderIndex: number): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
 
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
     if (!material.visible) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
-    const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
+    const objectData = new ArrayBuffer(PER_OBJECT_UNIFORM_SIZE);
+    const objectDataFloat32 = new Float32Array(objectData);
+    const objectDataUint32 = new Uint32Array(objectData);
 
     const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
-    objectData.set(worldMatrix.elements, 0) // modelMatrix
-    objectData.set(normalMatrix.elements, 16) // normalMatrix
-
+    objectDataFloat32.set(worldMatrix.elements, 0) // modelMatrix
+    objectDataFloat32.set(normalMatrix.elements, 16) // normalMatrix
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
-      objectData.set(material.color.toArray(), 32)
+      objectDataFloat32.set(material.color.toArray(), 32)
     }
 
-    this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
+    const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0;
+    objectDataUint32[36] = isSkinned; // isSkinned flag
 
-    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset])
+    this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData);
 
-    const { positionBuffer, normalBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
+    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+
+    if (isSkinned) {
+      const skeleton = (mesh as SkinnedMesh).skeleton;
+      this.device.queue.writeBuffer(this.perObjectUniformBuffer, boneMatricesOffset, skeleton.boneMatrices);
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
+    } else {
+      // Для не-скиннингованных мешей можно не устанавливать второй offset или установить его в 0
+      // Но для консистентности лучше передавать валидный offset, даже если он не будет использоваться
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
+    }
+
+    const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
 
     passEncoder.setVertexBuffer(0, positionBuffer)
     if (normalBuffer) {
       passEncoder.setVertexBuffer(1, normalBuffer)
+    }
+    if (isSkinned && skinIndexBuffer && skinWeightBuffer) {
+      passEncoder.setVertexBuffer(2, skinIndexBuffer);
+      passEncoder.setVertexBuffer(3, skinWeightBuffer);
     }
 
     if (indexBuffer) {

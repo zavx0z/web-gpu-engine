@@ -52,6 +52,30 @@ export class Quaternion {
     return [this.x, this.y, this.z, this.w];
   }
 
+  public fromArray( array: ArrayLike<number>, offset: number = 0 ): this {
+		this.x = array[ offset ];
+		this.y = array[ offset + 1 ];
+		this.z = array[ offset + 2 ];
+		this.w = array[ offset + 3 ];
+		return this;
+	}
+
+  public copy(q: Quaternion): this {
+    this.x = q.x;
+    this.y = q.y;
+    this.z = q.z;
+    this.w = q.w;
+    return this;
+  }
+
+  public set(x: number, y: number, z: number, w: number): this {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.w = w;
+    return this;
+  }
+
   /**
    * Устанавливает кватернион из оси и угла.
    * @param axis Ось вращения (должна быть нормализована).

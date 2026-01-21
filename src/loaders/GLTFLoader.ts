@@ -21,19 +21,21 @@ import { Mesh } from "../core/Mesh"
 import { BufferAttribute, BufferGeometry } from "../core/BufferGeometry"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Color } from "../math/Color"
+import { SkinnedMesh } from "../core/SkinnedMesh"
+import { Skeleton } from "../animation/Skeleton"
+import { Matrix4 } from "../math/Matrix4"
+import { AnimationClip } from "../animation/AnimationClip"
+import { KeyframeTrack } from "../animation/KeyframeTrack"
+import { Quaternion } from "../math/Quaternion"
 
 // --- GLTF Constants ---
-const GLB_MAGIC = 0x46546C67 // "glTF" в ASCII
-const JSON_CHUNK_TYPE = 0x4E4F534A // "JSON" в ASCII
-const BIN_CHUNK_TYPE = 0x004E4942 // "BIN\0" в ASCII
+const GLB_MAGIC = 0x46546c67 // "glTF" в ASCII
+const JSON_CHUNK_TYPE = 0x4e4f534a // "JSON" в ASCII
+const BIN_CHUNK_TYPE = 0x004e4942 // "BIN\0" в ASCII
 
 // --- GLTF SPECIFICATION INTERFACES ---
-// Эти интерфейсы отражают структуру JSON-файла glTF 2.0, обеспечивая строгую типизацию.
-
-/** Корневой объект, описывающий весь glTF ассет. */
 interface GLTF {
   scenes?: GLTFScene[]
-  /** Индекс сцены, которая должна отображаться по умолчанию. */
   scene?: number
   nodes?: GLTFNode[]
   meshes?: GLTFMesh[]
@@ -41,146 +43,109 @@ interface GLTF {
   bufferViews?: GLTFBufferView[]
   accessors?: GLTFAccessor[]
   materials?: GLTFMaterial[]
+  skins?: GLTFSkin[]
+  animations?: GLTFAnimation[]
 }
 
-/** Описывает сцену как набор корневых узлов. */
 interface GLTFScene {
-  /** Массив индексов корневых узлов, принадлежащих этой сцене. */
   nodes: number[]
+  name?: string
 }
 
-/**
- * Узел в иерархии графа сцены. Может содержать трансформацию и/или ссылки на другие сущности (меш, камера и т.д.).
- * Трансформация может быть задана либо матрицей 4x4, либо набором TRS (translation, rotation, scale).
- */
 interface GLTFNode {
+  name?: string
   mesh?: number
+  skin?: number
   children?: number[]
   matrix?: number[]
   translation?: [number, number, number]
-  /** Вращение в виде кватерниона [x, y, z, w]. */
   rotation?: [number, number, number, number]
   scale?: [number, number, number]
 }
 
-/** Описывает 3D-объект, состоящий из одного или нескольких геометрических примитивов. */
 interface GLTFMesh {
-  /** Массив примитивов, из которых состоит меш. Каждый примитив может иметь свой материал. */
   primitives: GLTFPrimitive[]
+  name?: string
 }
 
-/**
- * Геометрический примитив, содержащий информацию для рендеринга.
- * Это фактическая геометрия, которая будет отрисована с использованием указанного материала.
- */
 interface GLTFPrimitive {
-  /** Словарь, где ключ - это семантика атрибута (e.g., 'POSITION', 'NORMAL'), а значение - индекс accessor'а. */
   attributes: { [key: string]: number }
-  /** Индекс accessor'а, указывающего на данные индексов вершин. */
   indices?: number
-  /** Индекс материала, который следует использовать для этого примитива. */
   material?: number
 }
 
-/** Ссылка на бинарный файл (.bin) и его размер. */
 interface GLTFBuffer {
-  /** URI бинарного файла. Может быть относительным путем или Data URI. */
   uri?: string
-  /** Длина буфера в байтах. */
   byteLength: number
 }
 
-/**
- * "Срез" (view) в бинарном буфере. Определяет непрерывный участок данных внутри `GLTFBuffer`.
- * Не несет информации о типе данных, только о их расположении.
- */
 interface GLTFBufferView {
-  /** Индекс буфера, к которому относится этот view. */
   buffer: number
-  /** Смещение от начала буфера в байтах. */
   byteOffset?: number
-  /** Длина этого среза в байтах. */
   byteLength: number
-  /**
-   * Цель, для которой предназначен буфер (e.g., 34962 для ARRAY_BUFFER, 34963 для ELEMENT_ARRAY_BUFFER).
-   * Используется для оптимизации в WebGL, но в данном загрузчике не применяется.
-   */
   target?: number
 }
 
-/**
- * "Accessor" - это финальный уровень абстракции, который описывает, как интерпретировать данные из `GLTFBufferView`.
- * Он определяет тип данных, их структуру (скаляр, вектор, матрица) и количество.
- */
 interface GLTFAccessor {
   bufferView?: number
   byteOffset?: number
-  /**
-   * Тип компонента данных. Соответствует константам WebGL.
-   * @example 5126 -> FLOAT, 5123 -> UNSIGNED_SHORT
-   * @see {@link GLTFLoader.getTypedArray}
-   */
   componentType: number
-  /** Количество элементов (например, количество вершин или индексов). */
   count: number
-  /**
-   * Тип данных в accessor'е.
-   * @example 'VEC3', 'SCALAR', 'MAT4'
-   * @see {@link GLTFLoader.getItemSize}
-   */
   type: string
+  max?: number[]
+  min?: number[]
 }
 
-/** Описание материала. glTF 2.0 использует PBR (Physically-Based Rendering) модель. */
 interface GLTFMaterial {
+  name?: string
   pbrMetallicRoughness?: {
-    /** Базовый цвет и альфа-канал материала в виде массива [r, g, b, a]. */
     baseColorFactor?: [number, number, number, number]
   }
 }
 
-/** Опции для загрузчика glTF. */
+interface GLTFSkin {
+  inverseBindMatrices?: number
+  joints: number[]
+  skeleton?: number
+  name?: string
+}
+
+interface GLTFAnimation {
+  name?: string
+  channels: GLTFAnimationChannel[]
+  samplers: GLTFAnimationSampler[]
+}
+
+interface GLTFAnimationChannel {
+  sampler: number
+  target: {
+    node: number
+    path: 'translation' | 'rotation' | 'scale'
+  }
+}
+
+interface GLTFAnimationSampler {
+  input: number // accessor to keyframe times
+  interpolation: 'LINEAR' | 'STEP' | 'CUBICSPLINE'
+  output: number // accessor to keyframe values
+}
+
 interface GLTFLoaderOptions {
-  /**
-   * Если `true`, автоматически преобразует систему координат модели из Y-up (стандарт glTF) в Z-up.
-   * @default true
-   */
   convertToZUp?: boolean
 }
 
-/**
- * Загрузчик для файлов формата glTF 2.0.
- * Поддерживает как стандартный `.gltf` (JSON + бинарные файлы), так и бинарный `.glb` формат.
- */
-export class GLTFLoader {
-  /**
-   * Асинхронно загружает и парсит glTF или GLB файл, создавая из него сцену.
-   *
-   * @param url - Путь к файлу `.gltf` или `.glb`.
-   * @param options - Опции загрузки.
-   * @returns Promise, который разрешается с объектом, содержащим готовую для рендеринга {@link Scene}.
-   * @throws Если не удается загрузить файл, он имеет неверный формат или его зависимости не найдены.
-   *
-   * @example
-   * ```ts
-   * const loader = new GLTFLoader();
-   * // Загрузка GLB с преобразованием осей (по умолчанию)
-   * const { scene } = await loader.load('./models/MyModel.glb');
-   * 
-   * // Загрузка GLTF без преобразования осей
-   * const { scene: rawScene } = await loader.load('./models/MyModel.gltf', { convertToZUp: false });
-   * 
-   * renderer.render(scene, camera);
-   * ```
-   */
-  public async load(url: string, options?: GLTFLoaderOptions): Promise<{ scene: Scene }> {
-    const { convertToZUp = true } = options ?? {}
+interface ParsedGLTF {
+  scene: Scene
+  animations: AnimationClip[]
+}
 
+export class GLTFLoader {
+  public async load(url: string, options?: GLTFLoaderOptions): Promise<ParsedGLTF> {
+    const { convertToZUp = true } = options ?? {}
     const response = await fetch(url)
     if (!response.ok) {
       throw new Error(`Failed to load ${url}: ${response.status} ${response.statusText}`)
     }
-
     const arrayBuffer = await response.arrayBuffer()
     if (arrayBuffer.byteLength < 4) {
       throw new Error(`File is too short or empty: ${url}`)
@@ -190,58 +155,55 @@ export class GLTFLoader {
     let buffers: ArrayBuffer[]
     const dataView = new DataView(arrayBuffer)
 
-    // Проверяем "магическое" число в заголовке, чтобы определить, является ли файл бинарным (GLB)
     if (dataView.getUint32(0, true) === GLB_MAGIC) {
       const glbResult = this.parseGLB(arrayBuffer)
       gltf = glbResult.gltf
       buffers = glbResult.buffers
     } else {
-      // Если это не GLB, предполагаем, что это стандартный текстовый GLTF
       const textDecoder = new TextDecoder('utf-8')
       gltf = JSON.parse(textDecoder.decode(arrayBuffer)) as GLTF
-      const baseUri = url.substring(0, url.lastIndexOf("/") + 1)
+      const baseUri = url.substring(0, url.lastIndexOf('/') + 1)
       buffers = await this.loadExternalBuffers(gltf, baseUri)
     }
 
     const materials = this.parseMaterials(gltf)
+    const animations = this.parseAnimations(gltf, buffers)
+
     const scene = new Scene()
     let parentNode: Object3D = scene
 
     if (convertToZUp) {
       const modelWrapper = new Object3D()
-      modelWrapper.rotation = new Vector3(Math.PI / 2, 0, 0)
+      modelWrapper.rotation.x = Math.PI / 2
       modelWrapper.updateMatrix()
       scene.add(modelWrapper)
       parentNode = modelWrapper
     }
 
+    const nodes = await this.parseNodes(gltf, buffers, materials)
+    const skeletons = await this.parseSkins(gltf, buffers, nodes)
+
+    this.assignSkeletonsToMeshes(nodes, skeletons, gltf)
+
     if (gltf.scene !== undefined && gltf.scenes) {
       const sceneDef = gltf.scenes[gltf.scene]
       for (const nodeIndex of sceneDef.nodes) {
-        const node = this.parseNode(gltf, nodeIndex, buffers, materials)
+        const node = nodes[nodeIndex]
         if (node) {
           parentNode.add(node)
         }
       }
     }
 
-    return { scene }
+    return { scene, animations }
   }
 
-  /**
-   * Парсит бинарный контейнер GLB, извлекая из него JSON-часть и бинарный чанк.
-   * @param data - ArrayBuffer с содержимым .glb файла.
-   * @returns Объект, содержащий распарсенный JSON (`gltf`) и массив с бинарным буфером (`buffers`).
-   * @throws Если структура GLB некорректна.
-   */
   private parseGLB(data: ArrayBuffer): { gltf: GLTF; buffers: ArrayBuffer[] } {
     const dataView = new DataView(data)
     const magic = dataView.getUint32(0, true)
-
     if (magic !== GLB_MAGIC) {
-      throw new Error("Invalid GLB file: incorrect magic number.")
+      throw new Error('Invalid GLB file: incorrect magic number.')
     }
-
     const version = dataView.getUint32(4, true)
     if (version !== 2) {
       throw new Error(`Unsupported GLB version: ${version}. Only version 2 is supported.`)
@@ -249,8 +211,7 @@ export class GLTFLoader {
 
     let jsonChunkData: ArrayBuffer | null = null
     let binChunkData: ArrayBuffer | null = null
-
-    let chunkOffset = 12 // Пропускаем 12-байтный заголовок
+    let chunkOffset = 12
 
     while (chunkOffset + 8 <= data.byteLength) {
       const chunkLength = dataView.getUint32(chunkOffset, true)
@@ -263,17 +224,15 @@ export class GLTFLoader {
       } else if (chunkType === BIN_CHUNK_TYPE) {
         binChunkData = chunkData
       }
-
       chunkOffset = chunkDataStart + chunkLength
     }
 
     if (!jsonChunkData) {
-      throw new Error("Invalid GLB file: JSON chunk not found.")
+      throw new Error('Invalid GLB file: JSON chunk not found.')
     }
 
     const textDecoder = new TextDecoder('utf-8')
     const gltf = JSON.parse(textDecoder.decode(jsonChunkData)) as GLTF
-
     const buffers: ArrayBuffer[] = []
     if (binChunkData) {
       buffers.push(binChunkData)
@@ -282,23 +241,19 @@ export class GLTFLoader {
     return { gltf, buffers }
   }
 
-  /**
-   * Загружает все внешние бинарные буферы, перечисленные в `.gltf` файле.
-   * @throws Если размер загруженного буфера не совпадает с `byteLength` из спецификации.
-   */
   private async loadExternalBuffers(gltf: GLTF, baseUri: string): Promise<ArrayBuffer[]> {
     const promises: Promise<ArrayBuffer>[] = []
     if (gltf.buffers) {
       for (const bufferInfo of gltf.buffers) {
         if (!bufferInfo.uri) {
-          throw new Error("Buffer URI is missing for external buffer.")
+          throw new Error('Buffer URI is missing for external buffer.')
         }
         promises.push(
           fetch(baseUri + bufferInfo.uri)
             .then((res) => res.arrayBuffer())
             .then((arrayBuffer) => {
               if (arrayBuffer.byteLength < bufferInfo.byteLength) {
-                throw new Error("glTF buffer length mismatch: loaded data is smaller than specified.")
+                throw new Error('glTF buffer length mismatch: loaded data is smaller than specified.')
               }
               return arrayBuffer
             })
@@ -308,10 +263,6 @@ export class GLTFLoader {
     return Promise.all(promises)
   }
 
-  /**
-   * Парсит материалы из glTF.
-   * **Ограничение:** В текущей реализации создается `MeshLambertMaterial` и используется только `baseColorFactor`.
-   */
   private parseMaterials(gltf: GLTF): MeshLambertMaterial[] {
     const materials: MeshLambertMaterial[] = []
     if (gltf.materials) {
@@ -327,102 +278,176 @@ export class GLTFLoader {
     return materials
   }
 
-  /**
-   * Рекурсивно парсит узел сцены (node) и всех его потомков.
-   */
-  private parseNode(
+  private async parseNodes(
     gltf: GLTF,
-    nodeIndex: number,
     buffers: ArrayBuffer[],
     materials: MeshLambertMaterial[]
-  ): Object3D | null {
-    const nodeDef = gltf.nodes![nodeIndex]
-    const node = new Object3D()
+  ): Promise<Object3D[]> {
+    const nodes: Object3D[] = []
+    if (!gltf.nodes) return []
 
-    if (nodeDef.matrix) {
-      node.modelMatrix.elements.set(nodeDef.matrix)
-    } else {
-      if (nodeDef.translation) {
-        node.position.x = nodeDef.translation[0]
-        node.position.y = nodeDef.translation[1]
-        node.position.z = nodeDef.translation[2]
+    for (let i = 0; i < gltf.nodes.length; i++) {
+      const nodeDef = gltf.nodes[i]
+      const node = new Object3D()
+      node.name = nodeDef.name || `node_${i}`
+
+      if (nodeDef.matrix) {
+        node.modelMatrix.elements.set(nodeDef.matrix)
+        // Decompose matrix to get position, quaternion, scale
+      } else {
+        if (nodeDef.translation) {
+          node.position.set(nodeDef.translation[0], nodeDef.translation[1], nodeDef.translation[2])
+        }
+        if (nodeDef.rotation) {
+          node.quaternion.set(nodeDef.rotation[0], nodeDef.rotation[1], nodeDef.rotation[2], nodeDef.rotation[3])
+        }
+        if (nodeDef.scale) {
+          node.scale.set(nodeDef.scale[0], nodeDef.scale[1], nodeDef.scale[2])
+        }
+        node.updateMatrix()
       }
-      if (nodeDef.rotation) {
-        node.quaternion.x = nodeDef.rotation[0]
-        node.quaternion.y = nodeDef.rotation[1]
-        node.quaternion.z = nodeDef.rotation[2]
-        node.quaternion.w = nodeDef.rotation[3]
+
+      if (nodeDef.mesh !== undefined) {
+        const meshDef = gltf.meshes![nodeDef.mesh]
+        for (const primitive of meshDef.primitives) {
+          const geometry = this.parseGeometry(gltf, primitive, buffers)
+          const material = primitive.material !== undefined ? materials[primitive.material] : new MeshLambertMaterial()
+          const mesh = new Mesh(geometry, material)
+          mesh.name = meshDef.name || `mesh_${nodeDef.mesh}`
+          node.add(mesh)
+        }
       }
-      if (nodeDef.scale) {
-        node.scale.x = nodeDef.scale[0]
-        node.scale.y = nodeDef.scale[1]
-        node.scale.z = nodeDef.scale[2]
-      }
-      node.updateMatrix()
+      nodes.push(node)
     }
 
-    if (nodeDef.mesh !== undefined) {
-      const meshDef = gltf.meshes![nodeDef.mesh]
-      for (const primitive of meshDef.primitives) {
-        const geometry = this.parseGeometry(gltf, primitive, buffers)
-        const material = primitive.material !== undefined ? materials[primitive.material] : new MeshLambertMaterial()
-        const mesh = new Mesh(geometry, material)
-        node.add(mesh)
-      }
-    }
-
-    if (nodeDef.children) {
-      for (const childIndex of nodeDef.children) {
-        const childNode = this.parseNode(gltf, childIndex, buffers, materials)
-        if (childNode) {
-          node.add(childNode)
+    // Build hierarchy
+    for (let i = 0; i < gltf.nodes.length; i++) {
+      const nodeDef = gltf.nodes[i]
+      const parent = nodes[i]
+      if (nodeDef.children) {
+        for (const childIndex of nodeDef.children) {
+          const child = nodes[childIndex]
+          if (parent && child) {
+            parent.add(child)
+          }
         }
       }
     }
 
-    return node
+    return nodes
   }
 
-  /**
-   * Парсит геометрию примитива, извлекая вершинные данные из буферов.
-   */
+  private async parseSkins(gltf: GLTF, buffers: ArrayBuffer[], nodes: Object3D[]): Promise<Skeleton[]> {
+    const skeletons: Skeleton[] = []
+    if (!gltf.skins) return []
+
+    for (const skinDef of gltf.skins) {
+      const bones: Object3D[] = []
+      for (const jointIndex of skinDef.joints) {
+        bones.push(nodes[jointIndex])
+      }
+
+      let boneInverses: Matrix4[] = []
+      if (skinDef.inverseBindMatrices !== undefined) {
+        const accessor = gltf.accessors![skinDef.inverseBindMatrices]
+        const data = this.getAccessorData(gltf, accessor, buffers) as Float32Array
+        for (let i = 0; i < data.length; i += 16) {
+          const matrix = new Matrix4()
+          matrix.elements.set(data.subarray(i, i + 16))
+          boneInverses.push(matrix)
+        }
+      }
+
+      skeletons.push(new Skeleton(bones, boneInverses))
+    }
+
+    return skeletons
+  }
+
+  private assignSkeletonsToMeshes(nodes: Object3D[], skeletons: Skeleton[], gltf: GLTF): void {
+    if (!gltf.nodes) return;
+
+    for (let i = 0; i < gltf.nodes.length; i++) {
+      const nodeDef = gltf.nodes[i]
+      if (nodeDef.skin === undefined || nodeDef.mesh === undefined) continue;
+
+      const node = nodes[i]
+      const skeleton = skeletons[nodeDef.skin]
+      if (!node || !skeleton) continue;
+
+      const newChildren: Object3D[] = []
+      node.traverse((child) => {
+        if (child instanceof Mesh) {
+            const parent = child.parent;
+            if(parent) {
+                const index = parent.children.indexOf(child);
+                if(index !== -1) {
+                    const skinnedMesh = new SkinnedMesh(child.geometry, child.material, skeleton);
+                    skinnedMesh.name = child.name;
+                    parent.children[index] = skinnedMesh;
+                    skinnedMesh.parent = parent;
+                }
+            }
+        }
+      });
+    }
+  }
+
+  private parseAnimations(gltf: GLTF, buffers: ArrayBuffer[]): AnimationClip[] {
+    const animations: AnimationClip[] = []
+    if (!gltf.animations) return []
+
+    for (const animDef of gltf.animations) {
+      const tracks: KeyframeTrack[] = []
+      for (const channel of animDef.channels) {
+        const sampler = animDef.samplers[channel.sampler]
+        if (!sampler || sampler.interpolation !== 'LINEAR') continue
+
+        const times = this.getAccessorData(gltf, gltf.accessors![sampler.input], buffers) as Float32Array
+        let values = this.getAccessorData(gltf, gltf.accessors![sampler.output], buffers) as Float32Array
+
+        const nodeIndex = channel.target.node
+        const nodeName = gltf.nodes?.[nodeIndex]?.name || `node_${nodeIndex}`
+
+        let trackType: 'vector' | 'quaternion' | 'scale' | undefined;
+        if (channel.target.path === 'translation') trackType = 'vector';
+        else if (channel.target.path === 'rotation') trackType = 'quaternion';
+        else if (channel.target.path === 'scale') trackType = 'vector'; // Treat scale as vector
+
+        if (trackType) {
+          tracks.push(new KeyframeTrack(nodeName, trackType, times, values))
+        }
+      }
+      animations.push(new AnimationClip(animDef.name || `anim_${animations.length}`, -1, tracks))
+    }
+
+    return animations
+  }
+
   private parseGeometry(gltf: GLTF, primitive: GLTFPrimitive, buffers: ArrayBuffer[]): BufferGeometry {
     const geometry = new BufferGeometry()
 
     for (const [attributeName, accessorIndex] of Object.entries(primitive.attributes)) {
-      if (attributeName === "POSITION" || attributeName === "NORMAL") {
-        const accessor = gltf.accessors![accessorIndex]
-        const bufferView = gltf.bufferViews![accessor.bufferView!]
-        const buffer = buffers[bufferView.buffer]
-        const componentType = accessor.componentType
-        const type = accessor.type
-        const count = accessor.count
+      const accessor = gltf.accessors![accessorIndex]
+      const data = this.getAccessorData(gltf, accessor, buffers)
+      const itemSize = this.getItemSize(accessor.type)
 
-        const TypedArray = this.getTypedArray(componentType)
-        const itemSize = this.getItemSize(type)
-
-        const array = new TypedArray(
-          buffer,
-          (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0),
-          count * itemSize
-        )
-
-        const attributeNameLower = attributeName.toLowerCase() as 'position' | 'normal';
-        geometry.setAttribute(attributeNameLower, new BufferAttribute(array, itemSize))
+      let bufferName: string;
+      switch (attributeName) {
+        case 'POSITION': bufferName = 'position'; break;
+        case 'NORMAL': bufferName = 'normal'; break;
+        case 'JOINTS_0': bufferName = 'skinIndex'; break;
+        case 'WEIGHTS_0': bufferName = 'skinWeight'; break;
+        default: continue;
       }
+
+      geometry.setAttribute(bufferName, new BufferAttribute(data, itemSize))
     }
 
     if (primitive.indices !== undefined) {
       const accessor = gltf.accessors![primitive.indices]
-      const bufferView = gltf.bufferViews![accessor.bufferView!]
-      const buffer = buffers[bufferView.buffer]
-      const componentType = accessor.componentType
-      const count = accessor.count
-
-      const TypedArray = this.getTypedArray(componentType)
-      const array = new TypedArray(buffer, (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0), count)
-
-      geometry.setIndex(new BufferAttribute(array, 1))
+      const data = this.getAccessorData(gltf, accessor, buffers)
+      geometry.setIndex(new BufferAttribute(data, 1))
     }
 
     if (!geometry.attributes.normal && geometry.index) {
@@ -432,51 +457,41 @@ export class GLTFLoader {
     return geometry
   }
 
-  /**
-   * Возвращает конструктор TypedArray на основе числового кода из спецификации glTF.
-   * @param componentType - Числовой код типа компонента (e.g., 5126 для FLOAT).
-   */
+  private getAccessorData(gltf: GLTF, accessor: GLTFAccessor, buffers: ArrayBuffer[]): ArrayBufferView {
+    const bufferView = gltf.bufferViews![accessor.bufferView!]
+    const buffer = buffers[bufferView.buffer]
+    const componentType = accessor.componentType
+    const TypedArray = this.getTypedArray(componentType)
+    const itemSize = this.getItemSize(accessor.type)
+    const byteOffset = (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
+    const elementCount = accessor.count * itemSize
+
+    return new TypedArray(buffer, byteOffset, elementCount)
+  }
+
   private getTypedArray(componentType: number): any {
     switch (componentType) {
-      case 5120: // BYTE
-        return Int8Array
-      case 5121: // UNSIGNED_BYTE
-        return Uint8Array
-      case 5122: // SHORT
-        return Int16Array
-      case 5123: // UNSIGNED_SHORT
-        return Uint16Array
-      case 5125: // UNSIGNED_INT
-        return Uint32Array
-      case 5126: // FLOAT
-        return Float32Array
-      default:
-        throw new Error(`Unsupported componentType: ${componentType}`)
+      case 5120: return Int8Array
+      case 5121: return Uint8Array
+      case 5122: return Int16Array
+      case 5123: return Uint16Array
+      case 5125: return Uint32Array
+      case 5126: return Float32Array
+      default: throw new Error(`Unsupported componentType: ${componentType}`)
     }
   }
 
-  /**
-   * Возвращает количество компонентов для типа данных из спецификации glTF.
-   * @param type - Строковый тип данных (e.g., "VEC3").
-   */
   private getItemSize(type: string): number {
     switch (type) {
-      case "SCALAR":
-        return 1
-      case "VEC2":
-        return 2
-      case "VEC3":
-        return 3
-      case "VEC4":
-        return 4
-      case "MAT2":
-        return 4
-      case "MAT3":
-        return 9
-      case "MAT4":
-        return 16
-      default:
-        throw new Error(`Unsupported type: ${type}`)
+      case 'SCALAR': return 1
+      case 'VEC2': return 2
+      case 'VEC3': return 3
+      case 'VEC4': return 4
+      case 'MAT2': return 4
+      case 'MAT3': return 9
+      case 'MAT4': return 16
+      default: throw new Error(`Unsupported type: ${type}`)
     }
   }
 }
+

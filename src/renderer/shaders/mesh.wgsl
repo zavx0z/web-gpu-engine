@@ -20,8 +20,15 @@ struct PerObjectUniforms {
     modelMatrix: mat4x4<f32>,
     normalMatrix: mat4x4<f32>,
     color: vec4<f32>,
+    isSkinned: u32,
 };
 @binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
+
+// --- Skinning --- 
+struct SkinUniforms {
+    boneMatrices: array<mat4x4<f32>, 128>,
+};
+@binding(1) @group(1) var<uniform> skin: SkinUniforms;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -30,14 +37,40 @@ struct VertexOutput {
 };
 
 @vertex
-fn vs_main(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>) -> VertexOutput {
+fn vs_main(
+    @location(0) pos: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) skinIndex: vec4<u32>,
+    @location(3) skinWeight: vec4<f32>
+) -> VertexOutput {
     var out: VertexOutput;
-    let worldPosition = perObject.modelMatrix * vec4<f32>(pos, 1.0);
+    var skinMatrix = mat4x4<f32>(); // Identity matrix
+
+    if (perObject.isSkinned == 1u) {
+        skinMatrix =
+            skin.boneMatrices[skinIndex.x] * skinWeight.x +
+            skin.boneMatrices[skinIndex.y] * skinWeight.y +
+            skin.boneMatrices[skinIndex.z] * skinWeight.z +
+            skin.boneMatrices[skinIndex.w] * skinWeight.w;
+    } else {
+        skinMatrix = mat4x4<f32>(
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        );
+    }
+
+    let skinnedPosition = skinMatrix * vec4<f32>(pos, 1.0);
+    let worldPosition = perObject.modelMatrix * skinnedPosition;
     out.position = globalUniforms.viewProjectionMatrix * worldPosition;
     
     out.viewPosition = (sceneUniforms.viewMatrix * worldPosition).xyz;
-    let worldNormal = (perObject.normalMatrix * vec4<f32>(normal, 0.0)).xyz;
+
+    let skinnedNormal = skinMatrix * vec4<f32>(normal, 0.0);
+    let worldNormal = (perObject.normalMatrix * skinnedNormal).xyz;
     out.viewNormal = (sceneUniforms.viewNormalMatrix * vec4<f32>(worldNormal, 0.0)).xyz;
+
     return out;
 }
 
