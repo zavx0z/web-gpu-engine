@@ -215,7 +215,7 @@ export class Renderer {
         entryPoint: "fs_main",
         targets: [{ format: this.presentationFormat }],
       },
-      primitive: { topology: "triangle-list", cullMode: "back" },
+      primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: {
         depthWriteEnabled: true,
         depthCompare: "less",

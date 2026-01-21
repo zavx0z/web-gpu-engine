@@ -395,7 +395,7 @@ export class GLTFLoader {
         let trackType: 'vector' | 'quaternion' | 'scale' | undefined;
         if (channel.target.path === 'translation') trackType = 'vector';
         else if (channel.target.path === 'rotation') trackType = 'quaternion';
-        else if (channel.target.path === 'scale') trackType = 'vector'; // Treat scale as vector
+        else if (channel.target.path === 'scale') trackType = 'scale';
 
         if (trackType) {
           tracks.push(new KeyframeTrack(nodeName, trackType, times, values))
