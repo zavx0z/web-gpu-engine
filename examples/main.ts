@@ -60,14 +60,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   scene.add(gltf.scene)
 
   let mixer: AnimationMixer | null = null;
-
   if (gltf.animations.length > 0) {
     mixer = new AnimationMixer(gltf.scene);
-    const clip = gltf.animations[0]; // Проигрываем первую анимацию
-    if (clip) {
-        const action = mixer.clipAction(clip);
-        action.play();
-    }
+    gltf.animations.forEach((clip) => {
+      mixer!.clipAction(clip).play();
+    });
   }
 
   try {
