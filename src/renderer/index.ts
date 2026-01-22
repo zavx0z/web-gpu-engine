@@ -68,6 +68,7 @@ export class Renderer {
   // --- Ресурсы для каждого объекта ---
   private perObjectUniformBuffer: GPUBuffer | null = null
   private perObjectBindGroup: GPUBindGroup | null = null
+  private perObjectDataCPU: Float32Array | null = null
 
   private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
   private depthTexture: GPUTexture | null = null
@@ -119,6 +120,7 @@ export class Renderer {
       size: MAX_RENDERABLES * PER_OBJECT_DATA_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
+    this.perObjectDataCPU = new Float32Array(MAX_RENDERABLES * (PER_OBJECT_DATA_SIZE / 4))
 
     const globalBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
@@ -352,18 +354,13 @@ export class Renderer {
       },
     }
 
-    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
-
     const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
     this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
 
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
     collectSceneObjects(scene, renderList, lightList)
-
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
-
-    passEncoder.setBindGroup(0, this.globalBindGroup!)
 
     // --- Сортировка списка рендеринга для минимизации смены конвейера ---
     const pipelineOrder: { [key: string]: number } = {
@@ -377,6 +374,32 @@ export class Renderer {
     const indexedRenderList = renderList.map((item, index) => ({ item, originalIndex: index }))
     indexedRenderList.sort((a, b) => pipelineOrder[a.item.type] - pipelineOrder[b.item.type])
 
+    // --- Pass 1: Update CPU Data ---
+    for (const { item, originalIndex } of indexedRenderList) {
+      switch (item.type) {
+        case "mesh":
+          this.renderMesh(null, item.object as Mesh, item.worldMatrix, originalIndex)
+          break
+        case "line":
+          this.renderLines(null, item.object as LineSegments, item.worldMatrix, originalIndex)
+          break
+        case "text-stencil":
+          this.renderTextPass(null, item.object as Text, item.worldMatrix, originalIndex, true)
+          break
+        case "text-cover":
+          this.renderTextPass(null, item.object as Text, item.worldMatrix, originalIndex, false)
+          break
+      }
+    }
+
+    // --- Upload Data ---
+    if (this.perObjectDataCPU) {
+      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, this.perObjectDataCPU)
+    }
+
+    // --- Pass 2: Render ---
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
+    passEncoder.setBindGroup(0, this.globalBindGroup!)
     let currentPipeline: GPURenderPipeline | null = null
 
     for (const { item, originalIndex } of indexedRenderList) {
@@ -544,116 +567,108 @@ export class Renderer {
     return buffers
   }
 
-  private renderMesh(passEncoder: GPURenderPassEncoder, mesh: Mesh | SkinnedMesh, worldMatrix: Matrix4, renderIndex: number): void {
-    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
-
+  private renderMesh(passEncoder: GPURenderPassEncoder | null, mesh: Mesh | SkinnedMesh, worldMatrix: Matrix4, renderIndex: number): void {
+    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
     if (!material.visible) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
-    const objectData = new ArrayBuffer(PER_OBJECT_UNIFORM_SIZE);
-    const objectDataFloat32 = new Float32Array(objectData);
-    const objectDataUint32 = new Uint32Array(objectData);
+    const offsetFloats = dynamicOffset / 4
 
     const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
-    objectDataFloat32.set(worldMatrix.elements, 0) // modelMatrix
-    objectDataFloat32.set(normalMatrix.elements, 16) // normalMatrix
+
+    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats) // modelMatrix
+    this.perObjectDataCPU.set(normalMatrix.elements, offsetFloats + 16) // normalMatrix
 
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
-      objectDataFloat32.set(material.color.toArray(), 32)
+      this.perObjectDataCPU.set(material.color.toArray(), offsetFloats + 32)
     }
-
     const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0;
-    objectDataUint32[36] = isSkinned; // isSkinned flag
-
-    this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData);
+    new Uint32Array(this.perObjectDataCPU.buffer)[offsetFloats + 36] = isSkinned; // isSkinned flag
 
     const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
 
     if (isSkinned) {
       const skeleton = (mesh as SkinnedMesh).skeleton;
-this.device.queue.writeBuffer(this.perObjectUniformBuffer, boneMatricesOffset, skeleton.boneMatrices.buffer, skeleton.boneMatrices.byteOffset, skeleton.boneMatrices.byteLength);
+      this.perObjectDataCPU.set(skeleton.boneMatrices, boneMatricesOffset / 4);
+    }
+
+    if (passEncoder) {
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
-    } else {
-      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
-    }
 
-    const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
+      const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
 
-    passEncoder.setVertexBuffer(0, positionBuffer)
-    if (normalBuffer) {
-      passEncoder.setVertexBuffer(1, normalBuffer)
-    }
-    if (isSkinned && skinIndexBuffer && skinWeightBuffer) {
-      passEncoder.setVertexBuffer(2, skinIndexBuffer);
-      passEncoder.setVertexBuffer(3, skinWeightBuffer);
-    }
+      passEncoder.setVertexBuffer(0, positionBuffer)
+      if (normalBuffer) {
+        passEncoder.setVertexBuffer(1, normalBuffer)
+      }
+      if (isSkinned && skinIndexBuffer && skinWeightBuffer) {
+        passEncoder.setVertexBuffer(2, skinIndexBuffer);
+        passEncoder.setVertexBuffer(3, skinWeightBuffer);
+      }
 
-    if (indexBuffer) {
-      const indexFormat = mesh.geometry.index!.array instanceof Uint32Array ? "uint32" : "uint16"
-      passEncoder.setIndexBuffer(indexBuffer, indexFormat)
-      passEncoder.drawIndexed(mesh.geometry.index!.count)
-    } else {
-      passEncoder.draw(mesh.geometry.attributes.position.count)
+      if (indexBuffer) {
+        const indexFormat = mesh.geometry.index!.array instanceof Uint32Array ? "uint32" : "uint16"
+        passEncoder.setIndexBuffer(indexBuffer, indexFormat)
+        passEncoder.drawIndexed(mesh.geometry.index!.count)
+      } else {
+        passEncoder.draw(mesh.geometry.attributes.position.count)
+      }
     }
   }
 
   private renderLines(
-    passEncoder: GPURenderPassEncoder,
+    passEncoder: GPURenderPassEncoder | null,
     lines: LineSegments,
     worldMatrix: Matrix4,
     renderIndex: number
   ): void {
-    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
-
+    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
     if (!(lines.material instanceof LineBasicMaterial) || !lines.material.visible) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
-    const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
-    objectData.set(worldMatrix.elements, 0)
-    this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
+    const offsetFloats = dynamicOffset / 4
+    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
 
-    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
-    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
+    if (passEncoder) {
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
+      const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
-    const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
-
-    passEncoder.setVertexBuffer(0, positionBuffer)
-    if (colorBuffer) passEncoder.setVertexBuffer(1, colorBuffer)
-
-    passEncoder.draw(lines.geometry.attributes.position.count)
+      passEncoder.setVertexBuffer(0, positionBuffer)
+      if (colorBuffer) passEncoder.setVertexBuffer(1, colorBuffer)
+      passEncoder.draw(lines.geometry.attributes.position.count)
+    }
   }
 
   private renderTextPass(
-    passEncoder: GPURenderPassEncoder,
+    passEncoder: GPURenderPassEncoder | null,
     text: Text,
     worldMatrix: Matrix4,
     renderIndex: number,
     isStencil: boolean
   ): void {
-    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
-
+    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
     const geometry = isStencil ? text.stencilGeometry : text.coverGeometry
     if (!geometry.index) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
-    const objectData = new Float32Array(PER_OBJECT_DATA_SIZE / 4)
-    objectData.set(worldMatrix.elements, 0)
-
+    const offsetFloats = dynamicOffset / 4
+    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
     if (!isStencil) {
-      objectData.set((text.material as TextMaterial).color.toArray(), 32)
+      this.perObjectDataCPU.set((text.material as TextMaterial).color.toArray(), offsetFloats + 32)
     }
-    this.device.queue.writeBuffer(this.perObjectUniformBuffer, dynamicOffset, objectData)
 
-    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
-    passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
+    if (passEncoder) {
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
+      const { positionBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(geometry)
 
-    const { positionBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(geometry)
-
-    passEncoder.setVertexBuffer(0, positionBuffer)
-    const indexFormat = geometry.index.array instanceof Uint32Array ? "uint32" : "uint16"
-    passEncoder.setIndexBuffer(indexBuffer!, indexFormat)
-    passEncoder.drawIndexed(geometry.index.count)
+      passEncoder.setVertexBuffer(0, positionBuffer)
+      const indexFormat = geometry.index.array instanceof Uint32Array ? "uint32" : "uint16"
+      passEncoder.setIndexBuffer(indexBuffer!, indexFormat)
+      passEncoder.drawIndexed(geometry.index.count)
+    }
   }
 
   private updateTextures(): void {
