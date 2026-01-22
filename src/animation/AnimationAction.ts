@@ -83,13 +83,19 @@ export class AnimationAction {
   }
 
   private findKeyframeIndex(times: Float32Array, time: number): number {
-    let i = 0;
-    for (i = times.length - 1; i >= 0; --i) {
-        if (times[i] <= time) {
-            return i;
-        }
+    let low = 0;
+    let high = times.length - 1;
+
+    while (low < high) {
+      // Bitwise shift is faster than Math.floor
+      const mid = (low + high + 1) >>> 1;
+      if (times[mid] <= time) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
     }
-    return 0;
+    return low;
   }
 
   private applyValue(node: any, track: KeyframeTrack, index: number): void {
