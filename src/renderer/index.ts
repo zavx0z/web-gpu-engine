@@ -11,7 +11,8 @@ import { LineBasicMaterial } from "../materials/LineBasicMaterial"
 import { Vector3 } from "../math/Vector3"
 import { Text } from "../objects/Text"
 import { TextMaterial } from "../materials/TextMaterial"
-import meshShaderCode from "./shaders/mesh.wgsl" with { type: "text" }
+import meshStaticWGSL from "./shaders/mesh_static.wgsl" with { type: "text" }
+import meshSkinnedWGSL from "./shaders/mesh_skinned.wgsl" with { type: "text" }
 
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
 
@@ -55,7 +56,8 @@ export class Renderer {
   private device: GPUDevice | null = null
   private context: GPUCanvasContext | null = null
   private presentationFormat: GPUTextureFormat | null = null
-  private meshPipeline: GPURenderPipeline | null = null
+  private staticMeshPipeline: GPURenderPipeline | null = null
+  private skinnedMeshPipeline: GPURenderPipeline | null = null
   private linePipeline: GPURenderPipeline | null = null
   private textStencilPipeline: GPURenderPipeline | null = null
   private textCoverPipeline: GPURenderPipeline | null = null
@@ -185,8 +187,11 @@ export class Renderer {
     })
 
     // --- Shader Modules ---
-    const meshShaderModule = this.device.createShaderModule({
-      code: meshShaderCode,
+    const staticShaderModule = this.device.createShaderModule({
+      code: meshStaticWGSL,
+    })
+    const skinnedShaderModule = this.device.createShaderModule({
+      code: meshSkinnedWGSL,
     })
     const lineShaderModule = this.device.createShaderModule({
       code: lineShaderCode,
@@ -195,11 +200,38 @@ export class Renderer {
       code: textShaderCode,
     })
 
-    // --- Pipeline для Meshes ---
-    this.meshPipeline = await this.device.createRenderPipelineAsync({
+    // --- Pipeline для Static Meshes ---
+    this.staticMeshPipeline = await this.device.createRenderPipelineAsync({
       layout: pipelineLayout,
       vertex: {
-        module: meshShaderModule,
+        module: staticShaderModule,
+        entryPoint: "vs_main",
+        buffers: [
+          // position
+          { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+          // normal
+          { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+        ],
+      },
+      fragment: {
+        module: staticShaderModule,
+        entryPoint: "fs_main",
+        targets: [{ format: this.presentationFormat }],
+      },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: "less",
+        format: "depth24plus-stencil8",
+      },
+      multisample: { count: this.sampleCount },
+    })
+
+    // --- Pipeline для Skinned Meshes ---
+    this.skinnedMeshPipeline = await this.device.createRenderPipelineAsync({
+      layout: pipelineLayout,
+      vertex: {
+        module: skinnedShaderModule,
         entryPoint: "vs_main",
         buffers: [
           // position
@@ -213,7 +245,7 @@ export class Renderer {
         ],
       },
       fragment: {
-        module: meshShaderModule,
+        module: skinnedShaderModule,
         entryPoint: "fs_main",
         targets: [{ format: this.presentationFormat }],
       },
@@ -314,7 +346,8 @@ export class Renderer {
     if (
       !this.device ||
       !this.context ||
-      !this.meshPipeline ||
+      !this.staticMeshPipeline ||
+      !this.skinnedMeshPipeline ||
       !this.linePipeline ||
       !this.textStencilPipeline ||
       !this.textCoverPipeline ||
@@ -364,15 +397,26 @@ export class Renderer {
 
     // --- Сортировка списка рендеринга для минимизации смены конвейера ---
     const pipelineOrder: { [key: string]: number } = {
-      mesh: 0, // Сначала непрозрачные объекты
-      line: 1, // Затем линии
-      "text-stencil": 2, // Затем трафарет для текста
-      "text-cover": 3, // В конце заливка текста
+      "static-mesh": 0,
+      "skinned-mesh": 1,
+      line: 2,
+      "text-stencil": 3,
+      "text-cover": 4,
     }
 
     // Мы должны сохранить оригинальный индекс для правильного смещения в uniform-буфере
     const indexedRenderList = renderList.map((item, index) => ({ item, originalIndex: index }))
-    indexedRenderList.sort((a, b) => pipelineOrder[a.item.type] - pipelineOrder[b.item.type])
+    indexedRenderList.sort((a, b) => {
+      let typeA = a.item.type
+      let typeB = b.item.type
+      if (typeA === "mesh") {
+        typeA = (a.item.object as SkinnedMesh).isSkinnedMesh ? "skinned-mesh" : "static-mesh"
+      }
+      if (typeB === "mesh") {
+        typeB = (b.item.object as SkinnedMesh).isSkinnedMesh ? "skinned-mesh" : "static-mesh"
+      }
+      return pipelineOrder[typeA] - pipelineOrder[typeB]
+    })
 
     // --- Pass 1: Update CPU Data ---
     for (const { item, originalIndex } of indexedRenderList) {
@@ -408,7 +452,9 @@ export class Renderer {
       // Определяем, какой конвейер нужен для текущего объекта
       switch (item.type) {
         case "mesh":
-          pipeline = this.meshPipeline
+          pipeline = (item.object as SkinnedMesh).isSkinnedMesh
+            ? this.skinnedMeshPipeline
+            : this.staticMeshPipeline
           break
         case "line":
           pipeline = this.linePipeline
@@ -583,8 +629,8 @@ export class Renderer {
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
       this.perObjectDataCPU.set(material.color.toArray(), offsetFloats + 32)
     }
+
     const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0;
-    new Uint32Array(this.perObjectDataCPU.buffer)[offsetFloats + 36] = isSkinned; // isSkinned flag
 
     const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
 
