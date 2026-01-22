@@ -36,6 +36,8 @@
 
 export * from "./core/Object3D"
 export * from "./core/BufferGeometry"
+export * from "./geometries/PlaneGeometry"
+export * from "./geometries/SphereGeometry"
 export * from "./geometries/TorusGeometry"
 export * from "./core/ViewPoint"
 export * from "./core/Mesh"

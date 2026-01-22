@@ -11,12 +11,17 @@ import {
   Text,
   TrueTypeFont,
   TextMaterial,
-  AnimationMixer
+  AnimationMixer,
+  PlaneGeometry,
+  SphereGeometry,
+  TorusGeometry,
+  MeshLambertMaterial,
+  Mesh,
 } from "../src"
 
 document.addEventListener("DOMContentLoaded", async () => {
   const renderer = new Renderer()
-  
+
   const canvas: HTMLCanvasElement = document.body.querySelector("#metafor")!
   await renderer.init(canvas)
 
@@ -40,7 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     fov: (2 * Math.PI) / 5,
     position: { x: 2, y: -1.5, z: 1.5 },
     target: { x: 0, y: 0, z: 1 },
-    near: .1,
+    near: 0.1,
     far: 100,
   })
 
@@ -60,52 +65,81 @@ document.addEventListener("DOMContentLoaded", async () => {
   gltf.scene.updateMatrix()
   scene.add(gltf.scene)
 
-  let mixer: AnimationMixer | null = null;
+  let mixer: AnimationMixer | null = null
   if (gltf.animations.length > 0) {
-    mixer = new AnimationMixer(gltf.scene);
+    mixer = new AnimationMixer(gltf.scene)
     // The loader wraps content in a Z-up object (children[0]).
     // The actual GLTF root nodes (the bots) are children of this wrapper.
-    const modelRoot = gltf.scene.children[0];
-    
+    const modelRoot = gltf.scene.children[0]
+
     gltf.animations.forEach((clip, index) => {
       // Bind Animation 0 -> Object 0, Animation 1 -> Object 1, etc.
-      const localRoot = (modelRoot && modelRoot.children[index]) ? modelRoot.children[index] : gltf.scene;
-      const action = mixer!.clipAction(clip, localRoot);
-      action.play();
-    });
+      const localRoot = modelRoot && modelRoot.children[index] ? modelRoot.children[index] : gltf.scene
+      const action = mixer!.clipAction(clip, localRoot)
+      action.play()
+    })
   }
 
   try {
     const font = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
     const text = new Text("WebGPU Engine", font, 0.2, new TextMaterial({ color: new Color(1.0, 1.0, 1.0) }))
     // text.rotation.x = Math.PI / 2
-    text.position.set(-0.8, 0, 0)
+    text.position.set(-0.8, 0, 0.1)
     text.updateMatrix()
     scene.add(text)
   } catch (e) {
     console.error("Критическая ошибка при создании текста:", e)
   }
 
-  let lastTime = performance.now();
+  // --- Добавление новых геометрий ---
+  const plane = new Mesh(
+    new PlaneGeometry({ width: 2, height: 2 }),
+    new MeshLambertMaterial({ color: new Color(0.2, 0.4, 0.7) }),
+  )
+  plane.position.set(0, 0, 0)
+  plane.updateMatrix()
+  scene.add(plane)
+
+  const sphere = new Mesh(
+    new SphereGeometry({ radius: 0.04 }),
+    new MeshLambertMaterial({ color: new Color(0.8, 0.3, 0.3) }),
+  )
+  sphere.position.set(0, 0, 1)
+  sphere.updateMatrix()
+  scene.add(sphere)
+
+  const torus = new Mesh(
+    new TorusGeometry({ radius: 0.3, tube: 0.1 }),
+    new MeshLambertMaterial({ color: new Color(0.3, 0.8, 0.3) }),
+  )
+  torus.position.set(0, 0, 1)
+  torus.updateMatrix()
+  scene.add(torus)
+
+  let lastTime = performance.now()
 
   function animate() {
     requestAnimationFrame(animate)
 
-    const time = performance.now();
-    const delta = (time - lastTime) / 1000;
-    lastTime = time;
+    const time = performance.now()
+    const delta = (time - lastTime) / 1000
+    lastTime = time
 
-    if (mixer) mixer.update(delta);
+    // Анимация вращения геометрий
+    sphere.rotation.y += delta * 0.5
+    sphere.updateMatrix()
 
-    scene.updateWorldMatrix();
+
+    if (mixer) mixer.update(delta)
+
+    scene.updateWorldMatrix()
 
     gltf.scene.traverse((obj: any) => {
-      if (obj.isSkinnedMesh) obj.skeleton.update();
-    });
+      if (obj.isSkinnedMesh) obj.skeleton.update()
+    })
 
     renderer.render(scene, viewPoint)
   }
 
   animate()
 })
-

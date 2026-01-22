@@ -22,7 +22,7 @@
 2. **Graph Management**
    - В `src/core/Object3D.ts`: Реализовать метод `remove(child: Object3D)` для корректного удаления объектов из иерархии.
 
-3. **Geometries**
+3. ✅ **Geometries**
    - `PlaneGeometry.ts`: (New) Простая плоскость (2 треугольника) с UV-координатами (для спрайтов/текста).
    - `SphereGeometry.ts`: (New) Генерация вершин сферы (для отображения значений).
    - `TorusGeometry.ts`: (Existing) Визуализация контейнеров.

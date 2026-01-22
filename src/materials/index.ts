@@ -1,4 +1,5 @@
 export * from "./Material"
 export * from "./MeshBasicMaterial"
 export * from "./LineBasicMaterial"
+export * from "./MeshLambertMaterial"
 export * from "./TextMaterial"
