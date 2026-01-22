@@ -16,7 +16,10 @@ import {
 
 document.addEventListener("DOMContentLoaded", async () => {
   const renderer = new Renderer()
-  await renderer.init()
+  
+  const canvas: HTMLCanvasElement = document.body.querySelector("#metafor")!
+  await renderer.init(canvas)
+
   if (!renderer.canvas) {
     console.error("Не удалось инициализировать WebGPU")
     return

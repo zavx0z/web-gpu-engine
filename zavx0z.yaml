@@ -21,3 +21,4 @@ exclude:
   - '*.glb'
   - roadmap
   - '*.blend'
+  - media
