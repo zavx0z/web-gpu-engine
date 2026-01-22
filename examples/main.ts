@@ -92,11 +92,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     const delta = (time - lastTime) / 1000;
     lastTime = time;
 
-    if (mixer) {
-      mixer.update(delta);
-    }
+    if (mixer) mixer.update(delta);
 
     scene.updateWorldMatrix();
+
+    gltf.scene.traverse((obj: any) => {
+      if (obj.isSkinnedMesh) obj.skeleton.update();
+    });
+
     renderer.render(scene, viewPoint)
   }
 
