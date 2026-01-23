@@ -183,6 +183,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Переменные для wiggli эффекта (только дрожание)
   let time = 0
   const torusOriginalPos = new Vector3(0, 0, 1)
+  const sphereRelativePositions = [
+    new Vector3(-0.1, 0, 0), // Относительно тора
+    new Vector3(0.1, 0, 0)
+  ]
 
   // Параметры для wiggli эффекта - только небольшие колебания
   const torusWiggliParams = {
@@ -192,8 +196,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     speedZ: 2.1,
   }
 
+  // Параметры для wiggli эффекта сфер
+  const spheresWiggliParams = [
+    { // Первая сфера
+      amplitude: 0.015,
+      speedX: 3.5,
+      speedY: 4.2,
+      speedZ: 2.8,
+    },
+    { // Вторая сфера
+      amplitude: 0.018,
+      speedX: 4.1,
+      speedY: 3.7,
+      speedZ: 2.4,
+    }
+  ]
+
   // Случайные фазы для более естественного дрожания
   let torusPhase = Math.random() * Math.PI * 2
+  let spherePhases = [
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2
+  ]
 
   let lastTime = performance.now()
 
@@ -219,8 +243,41 @@ document.addEventListener("DOMContentLoaded", async () => {
       torusOriginalPos.z + torusOffsetZ,
     )
 
+    // Wiggli эффект для инстансированных сфер (относительно тора)
+    const tempMatrix = new Matrix4()
+    const tempVector = new Vector3()
+    
+    for (let i = 0; i < 2; i++) {
+      const sphereOffsetX = Math.sin(time * spheresWiggliParams[i].speedX + spherePhases[i]) * spheresWiggliParams[i].amplitude
+      const sphereOffsetY = Math.cos(time * spheresWiggliParams[i].speedY + spherePhases[i] * 1.3) * spheresWiggliParams[i].amplitude
+      const sphereOffsetZ = Math.sin(time * spheresWiggliParams[i].speedZ + spherePhases[i] * 0.7) * spheresWiggliParams[i].amplitude * 0.7
+      
+      const newPos = new Vector3(
+        sphereRelativePositions[i].x + sphereOffsetX,
+        sphereRelativePositions[i].y + sphereOffsetY,
+        sphereRelativePositions[i].z + sphereOffsetZ
+      )
+      
+      tempMatrix.identity()
+      tempMatrix.makeTranslation(newPos.x, newPos.y, newPos.z)
+      tempVector.set(0.5, 0.5, 0.5)
+      tempMatrix.scale(tempVector)
+      
+      spheresInsideTorus.setMatrixAt(i, tempMatrix)
+    }
+
+    // Важно: очищаем кэш геометрии в рендерере, чтобы он пересоздал буферы с новыми матрицами
+    // Это заставит рендерер создать новые буферы GPU с обновленными данными
+    renderer.geometryCache.delete(spheresInsideTorus.geometry)
+
+    // Обновляем геометрию с новыми матрицами инстансов
+    spheresInsideTorus.geometry.setAttribute('instanceMatrix', 
+      new BufferAttribute(spheresInsideTorus.instanceMatrix, 16)
+    )
+
     // Обновление матриц
     torus.updateMatrix()
+    spheresInsideTorus.updateMatrix()
     scene.updateWorldMatrix()
 
     gltf.scene.traverse((obj: any) => {
