@@ -1,6 +1,11 @@
 import { Object3D } from "./Object3D"
 import { BufferGeometry } from "./BufferGeometry"
 import { Material } from "../materials/Material"
+import { Raycaster, Intersection } from "./Raycaster"
+import { Matrix4 } from "../math/Matrix4"
+import { Ray } from "../math/Ray"
+import { Sphere } from "../math/Sphere"
+import { Vector3 } from "../math/Vector3"
 
 /**
  * Базовый объект сцены, представляющий 3D-модель.
@@ -44,5 +49,45 @@ export class Mesh extends Object3D {
     super()
     this.geometry = geometry
     this.material = material
+  }
+
+  public raycast(raycaster: Raycaster, intersects: Intersection[]): void {
+    const geometry = this.geometry
+    const material = this.material
+    const matrixWorld = this.matrixWorld
+
+    if (material === undefined) return
+
+    // 1. Проверка BoundingSphere (быстрый отсев)
+    if (geometry.boundingSphere === null) geometry.computeBoundingSphere()
+
+    const sphere = new Sphere().copy(geometry.boundingSphere!).applyMatrix4(matrixWorld)
+    if (raycaster.ray.intersectSphere(sphere, new Vector3()) === null) {
+      return
+    }
+
+    // 2. Трансформируем луч в локальное пространство объекта
+    const inverseMatrix = new Matrix4().copy(matrixWorld).invert()
+    const localRay = new Ray().copy(raycaster.ray).applyMatrix4(inverseMatrix)
+
+    // 3. Перебор треугольников (для простоты пока только сферы)
+    // TODO: Реализовать точное пересечение с треугольниками
+    // Пока что, если прошли сферу, считаем, что попали в объект, но точку берем на сфере
+    const intersectionPoint = new Vector3()
+    const localIntersection = localRay.intersectSphere(geometry.boundingSphere!, intersectionPoint)
+
+    if (localIntersection) {
+        // Переводим точку обратно в мировой сдвиг
+        intersectionPoint.applyMatrix4(matrixWorld)
+        const distance = raycaster.ray.origin.distanceTo(intersectionPoint)
+        
+        if (distance < raycaster.near || distance > raycaster.far) return
+
+        intersects.push({
+            distance: distance,
+            point: intersectionPoint,
+            object: this
+        })
+    }
   }
 }

@@ -1,6 +1,7 @@
 import { Matrix4 } from "../math/Matrix4"
 import { Quaternion } from "../math/Quaternion"
 import { Vector3 } from "../math/Vector3"
+import { Raycaster, Intersection } from "./Raycaster"
 
 /**
  * Базовый класс для всех объектов в сцене.
@@ -112,15 +113,15 @@ export class Object3D {
 
   public updateWorldMatrix(force: boolean = false): void {
     this.updateMatrix();
-
     if (this.parent) {
       this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.modelMatrix);
     } else {
       this.matrixWorld.copy(this.modelMatrix);
     }
-
     for (const child of this.children) {
       child.updateWorldMatrix(force);
     }
   }
+
+  public raycast(raycaster: Raycaster, intersects: Intersection[]): void {}
 }

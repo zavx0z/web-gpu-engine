@@ -1,9 +1,11 @@
 import { BufferGeometry, BufferAttribute } from "./BufferGeometry"
 import { Object3D } from "./Object3D"
-import { Matrix4 } from "../math/Matrix4"
 import { Vector3 } from "../math/Vector3"
 import { LineGlowMaterial } from "../materials/LineGlowMaterial"
 import { Color } from "../math/Color"
+import { Raycaster, Intersection } from "./Raycaster"
+import { Matrix4 } from "../math/Matrix4"
+import { Sphere } from "../math/Sphere"
 
 export class WireframeInstancedMesh extends Object3D {
   public readonly isWireframeInstancedMesh: true = true
@@ -181,6 +183,35 @@ export class WireframeInstancedMesh extends Object3D {
   public update(): void {
     if (this.instanceBufferNeedsUpdate) {
       this.updateInstanceBuffer()
+    }
+  }
+
+  public raycast(raycaster: Raycaster, intersects: Intersection[]): void {
+    if (this.geometry.boundingSphere === null) this.geometry.computeBoundingSphere()
+    const baseSphere = this.geometry.boundingSphere!
+    const matrixWorld = this.matrixWorld
+    const tempMatrix = new Matrix4()
+    const tempSphere = new Sphere()
+    const tempVector = new Vector3()
+
+    for (let i = 0; i < this.count; i++) {
+      const offset = i * 16
+      tempMatrix.elements.set(this.instanceMatrix.subarray(offset, offset + 16))
+
+      // Комбинируем мировую матрицу объекта и локальную матрицу инстанса
+      const finalMatrix = new Matrix4().multiplyMatrices(matrixWorld, tempMatrix)
+
+      // Трансформируем сферу
+      tempSphere.copy(baseSphere).applyMatrix4(finalMatrix)
+
+      if (raycaster.ray.intersectSphere(tempSphere, tempVector) !== null) {
+        intersects.push({
+          distance: raycaster.ray.origin.distanceTo(tempSphere.center),
+          point: tempVector.clone(),
+          object: this,
+          instanceId: i,
+        })
+      }
     }
   }
 }

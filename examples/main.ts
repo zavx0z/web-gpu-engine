@@ -20,6 +20,7 @@ import {
   BufferAttribute,
   WireframeInstancedMesh,
   MeshLambertMaterial,
+  Raycaster,
 } from "../src"
 import { Matrix4 } from "../src/math/Matrix4"
 import { Vector3 } from "../src/math/Vector3"
@@ -56,6 +57,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const grid = new GridHelper(10, 20)
   scene.add(grid)
+
+  // --- Raycaster Setup ---
+  const raycaster = new Raycaster()
+  const mouse = { x: 0, y: 0 }
+  
+  // Отслеживаем положение мыши в нормализованных координатах устройства (NDC)
+  window.addEventListener("mousemove", (event) => {
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+  })
 
   const light = new Light(new Color(1, 1, 1), 1)
   light.position.set(4, -4, 4)
@@ -237,6 +248,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     const delta = (currentTime - lastTime) / 1000
     lastTime = currentTime
     time += delta
+
+    // --- Raycasting Logic ---
+    raycaster.setFromCamera(mouse, viewPoint)
+    
+    // Сбрасываем цвета перед проверкой (логика "по умолчанию")
+    // Инстанс 0: Красный
+    spheresInsideTorus.setGlowColorAt(0, new Color("rgba(252, 70, 70, 0.8)"))
+    spheresInsideTorus.setGlowIntensityAt(0, 1.0)
+    // Инстанс 1: Зеленый
+    spheresInsideTorus.setGlowColorAt(1, new Color("rgba(70, 252, 70, 0.8)"))
+    spheresInsideTorus.setGlowIntensityAt(1, 1.5)
+
+    const intersects = raycaster.intersectObject(spheresInsideTorus)
+    
+    if (intersects.length > 0) {
+      const hit = intersects[0]
+      // Если попали в сферу, делаем её ярко-белой
+      if (hit.instanceId !== undefined) {
+        spheresInsideTorus.setGlowColorAt(hit.instanceId, new Color(1, 1, 1, 1))
+        spheresInsideTorus.setGlowIntensityAt(hit.instanceId, 3.0)
+      }
+    }
 
     if (mixer) mixer.update(delta)
 
