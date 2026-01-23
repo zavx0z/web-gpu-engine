@@ -228,4 +228,15 @@ export class Vector3 {
     this.z = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w
     return this
   }
+
+  public distanceTo(v: Vector3): number {
+    return Math.sqrt(this.distanceToSquared(v))
+  }
+
+  public distanceToSquared(v: Vector3): number {
+    const dx = this.x - v.x,
+      dy = this.y - v.y,
+      dz = this.z - v.z
+    return dx * dx + dy * dy + dz * dz
+  }
 }

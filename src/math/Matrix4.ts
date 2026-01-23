@@ -351,4 +351,12 @@ export class Matrix4 {
       n44 * (-n13 * n22 * n31 - n11 * n23 * n32 + n11 * n22 * n33 + n13 * n21 * n32 - n12 * n21 * n33 + n12 * n23 * n31)
     )
   }
+
+  public getMaxScaleOnAxis(): number {
+    const te = this.elements
+    const scaleXSq = te[0] * te[0] + te[1] * te[1] + te[2] * te[2]
+    const scaleYSq = te[4] * te[4] + te[5] * te[5] + te[6] * te[6]
+    const scaleZSq = te[8] * te[8] + te[9] * te[9] + te[10] * te[10]
+    return Math.sqrt(Math.max(scaleXSq, scaleYSq, scaleZSq))
+  }
 }

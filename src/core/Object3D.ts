@@ -66,6 +66,12 @@ export class Object3D {
   public visible: boolean = true
 
   /**
+   * Если true, объект проверяется на попадание в пирамиду видимости камеры перед рендерингом.
+   * Если false, объект рендерится всегда (если visible=true).
+   */
+  public frustumCulled: boolean = true
+
+  /**
    * Добавляет дочерний объект в иерархию.
    *
    * @param child - Объект для добавления в качестве дочернего элемента

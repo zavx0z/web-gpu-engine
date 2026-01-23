@@ -14,6 +14,7 @@ import { LineGlowMaterial } from "../materials/LineGlowMaterial"
 import { Vector3 } from "../math/Vector3"
 import { Text } from "../objects/Text"
 import { TextMaterial } from "../materials/TextMaterial"
+import { Frustum } from "../math/Frustum"
 import meshStaticWGSL from "./shaders/mesh_static.wgsl" with { type: "text" }
 import meshSkinnedWGSL from "./shaders/mesh_skinned.wgsl" with { type: "text" }
 import meshInstancedWGSL from "./shaders/mesh_instanced.wgsl" with { type: "text" }
@@ -85,6 +86,7 @@ export class Renderer {
   private multisampleTexture: GPUTexture | null = null
   private sampleCount = 4 // MSAA
   private pixelRatio = 1
+  private frustum: Frustum = new Frustum()
   public canvas: HTMLCanvasElement | null = null
 
   /**
@@ -608,9 +610,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
     this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
 
+    this.frustum.setFromProjectionMatrix(vpMatrix)
+
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
-    collectSceneObjects(scene, renderList, lightList)
+    collectSceneObjects(scene, renderList, lightList, this.frustum)
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
 
     // --- Сортировка списка рендеринга для минимизации смены конвейера ---

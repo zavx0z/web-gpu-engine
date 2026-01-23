@@ -1,4 +1,5 @@
 import { Vector3 } from "../math/Vector3"
+import { Sphere } from "../math/Sphere"
 
 /**
  * Типы TypedArray, которые можно использовать в BufferAttribute.
@@ -60,6 +61,8 @@ export class BufferGeometry {
    * Если `null`, используется отрисовка массивом (Non-indexed draw).
    */
   public index: BufferAttribute | null = null
+
+  public boundingSphere: Sphere | null = null
 
   /**
    * Добавляет или обновляет атрибут.
@@ -167,14 +170,52 @@ export class BufferGeometry {
   private normalizeNormals(attribute: BufferAttribute): void {
     const normals = attribute.array
     const tempNormal = new Vector3()
-
     for (let i = 0, il = attribute.count; i < il; i++) {
       tempNormal.fromArray(normals, i * 3)
       tempNormal.normalize()
-
       normals[i * 3 + 0] = tempNormal.x
       normals[i * 3 + 1] = tempNormal.y
       normals[i * 3 + 2] = tempNormal.z
+    }
+  }
+
+  public computeBoundingSphere(): void {
+    if (this.boundingSphere === null) {
+      this.boundingSphere = new Sphere()
+    }
+
+    const position = this.attributes.position
+    if (position) {
+      const center = this.boundingSphere.center
+      const array = position.array
+      let minX = Infinity, minY = Infinity, minZ = Infinity
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+
+      // 1. Calculate Bounding Box
+      for (let i = 0; i < position.count; i++) {
+        const x = array[i * 3]
+        const y = array[i * 3 + 1]
+        const z = array[i * 3 + 2]
+        if (x < minX) minX = x; if (x > maxX) maxX = x
+        if (y < minY) minY = y; if (y > maxY) maxY = y
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+      }
+
+      center.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
+
+      // 2. Calculate Radius
+      let maxRadiusSq = 0
+      for (let i = 0; i < position.count; i++) {
+        const x = array[i * 3]
+        const y = array[i * 3 + 1]
+        const z = array[i * 3 + 2]
+        const dx = x - center.x
+        const dy = y - center.y
+        const dz = z - center.z
+        const radiusSq = dx * dx + dy * dy + dz * dz
+        if (radiusSq > maxRadiusSq) maxRadiusSq = radiusSq
+      }
+      this.boundingSphere.radius = Math.sqrt(maxRadiusSq)
     }
   }
 }

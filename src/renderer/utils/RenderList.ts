@@ -7,6 +7,11 @@ import { Light } from "../../lights/Light"
 import { Matrix4 } from "../../math/Matrix4"
 import { SkinnedMesh } from "../../core/SkinnedMesh"
 import { WireframeInstancedMesh } from "../../core/WireframeInstancedMesh";
+import { Frustum } from "../../math/Frustum";
+import { Sphere } from "../../math/Sphere";
+import { Vector3 } from "../../math/Vector3";
+
+const _sphere = new Sphere();
 
 export interface RenderItem {
   type: "static-mesh" | "skinned-mesh" | "instanced-mesh" | "instanced-line" | "line" | "text-stencil" | "text-cover"
@@ -22,11 +27,27 @@ export interface LightItem {
 export function collectSceneObjects(
   object: Object3D,
   renderList: RenderItem[],
-  lights: LightItem[]
+  lights: LightItem[],
+  frustum?: Frustum
 ): void {
   if (!object.visible) return
 
   const worldMatrix = object.matrixWorld;
+
+  // Frustum Culling
+  if (frustum && object.frustumCulled && (object as any).geometry) {
+    const geometry = (object as any).geometry;
+    if (!geometry.boundingSphere) {
+      geometry.computeBoundingSphere();
+    }
+    
+    if (geometry.boundingSphere) {
+      _sphere.copy(geometry.boundingSphere).applyMatrix4(worldMatrix);
+      if (!frustum.intersectsSphere(_sphere)) {
+        return;
+      }
+    }
+  }
 
   if (object instanceof InstancedMesh) {
     renderList.push({ type: "instanced-mesh", object, worldMatrix })
@@ -46,6 +67,6 @@ export function collectSceneObjects(
   }
 
   for (const child of object.children) {
-    collectSceneObjects(child, renderList, lights);
+    collectSceneObjects(child, renderList, lights, frustum);
   }
 }
