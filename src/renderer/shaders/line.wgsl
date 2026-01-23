@@ -58,7 +58,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
   
   // Используем цвет свечения если он задан, иначе цвет вершины
   let glowColor = perObject.glowColor;
-  let useGlowColor = glowColor.a > 0.0;
+  let useGlowColor = glowColor.a > 0.5; // Увеличиваем порог для надежности
   let finalColor = select(in.vertexColor.rgb, glowColor.rgb, useGlowColor);
   
   return vec4<f32>(finalColor * finalFade, in.vertexColor.a * finalFade);

@@ -138,9 +138,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const sphereGeometry = new SphereGeometry({ radius: 0.04 })
   const sphere = new LineSegments(
     createWireframeGeometry(sphereGeometry),
-    new LineBasicMaterial({ color: new Color(0.8, 0.3, 0.3) }),
+    new LineGlowMaterial({
+      color: new Color(252, 70, 70, 0.4),
+      glowIntensity: 7.0,
+      glowColor: new Color("#ffffff"),
+    }),
   )
-  sphere.position.set(-0.3, 0, 1)
+  sphere.position.set(-0.2, 0, 1)
   sphere.updateMatrix()
   scene.add(sphere)
 
@@ -150,12 +154,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const torus = new LineSegments(
     createWireframeGeometry(torusGeometry),
     new LineGlowMaterial({ 
-      color: new Color("#6779fa"),
-      glowIntensity: 1,
-      glowColor: new Color("#ffee00")
+      color: new Color(109, 125, 244, 0.4),
+      glowIntensity: 7.0,
+      glowColor: new Color("#ffffff", 1.0) // Белый с полной непрозрачностью
     }),
   )
-  torus.position.set(0.3, 0, 1)
+  torus.position.set(0, 0, 1)
   torus.updateMatrix()
   scene.add(torus)
 
@@ -167,10 +171,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const time = performance.now()
     const delta = (time - lastTime) / 1000
     lastTime = time
-
-    // Анимация вращения геометрий
-    sphere.rotation.y += delta * 0.5
-    sphere.updateMatrix()
 
     if (mixer) mixer.update(delta)
 

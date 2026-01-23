@@ -21,14 +21,21 @@ export class Color {
   public b: number = 1.0
 
   /**
+   * @min 0
+   * @max 1
+   */
+  public a: number = 1.0
+
+  /**
    * Создает экземпляр Color.
    * @param r - Значение красного (0-255 или 0-1), шестнадцатеричное значение (число или строка), или другой экземпляр Color.
    * @param g - Значение зеленого (0-255 или 0-1).
    * @param b - Значение синего (0-255 или 0-1).
-   * @note Если значения больше 1, они автоматически делятся на 255 для нормализации.
+   * @param a - Значение альфа/прозрачности (0-1).
+   * @note Если значения RGB больше 1, они автоматически делятся на 255 для нормализации.
    *       Строки вида "#3147ea" или "#fff" также поддерживаются.
    */
-  constructor(r?: number | string | Color, g?: number, b?: number) {
+  constructor(r?: number | string | Color, g?: number, b?: number, a: number = 1.0) {
     if (r instanceof Color) {
       this.copy(r)
     } else if (typeof r === 'string') {
@@ -40,6 +47,7 @@ export class Color {
       const normalize = (value: number) => value > 1 ? value / 255 : value;
       this.setRGB(normalize(r as number), normalize(g!), normalize(b!))
     }
+    this.a = a
   }
 
   /**
@@ -51,6 +59,7 @@ export class Color {
     this.r = color.r
     this.g = color.g
     this.b = color.b
+    this.a = color.a
     return this
   }
 
@@ -59,7 +68,7 @@ export class Color {
    * @returns Новый объект Color.
    */
   public clone(): Color {
-    return new Color(this.r, this.g, this.b)
+    return new Color(this.r, this.g, this.b, this.a)
   }
 
   /**
@@ -77,6 +86,22 @@ export class Color {
   }
 
   /**
+   * Устанавливает цвет из RGBA компонентов.
+   * @param r - Красный компонент (0-1).
+   * @param g - Зеленый компонент (0-1).
+   * @param b - Синий компонент (0-1).
+   * @param a - Альфа компонент (0-1).
+   * @returns Возвращает этот экземпляр для чейнинга.
+   */
+  public setRGBA(r: number, g: number, b: number, a: number): this {
+    this.r = r
+    this.g = g
+    this.b = b
+    this.a = a
+    return this
+  }
+
+  /**
    * Устанавливает цвет из шестнадцатеричного значения.
    * @param hex - Шестнадцатеричное значение цвета (например, 0xff0000 для красного).
    * @returns Возвращает этот экземпляр для чейнинга.
@@ -86,6 +111,7 @@ export class Color {
     this.r = ((hex >> 16) & 255) / 255
     this.g = ((hex >> 8) & 255) / 255
     this.b = (hex & 255) / 255
+    this.a = 1.0
     return this
   }
 
@@ -114,10 +140,10 @@ export class Color {
   }
 
   /**
-   * Возвращает массив [r, g, b, 1.0] (RGBA) в виде Float32Array.
+   * Возвращает массив [r, g, b, a] (RGBA) в виде Float32Array.
    * @returns Массив со значениями цвета.
    */
   public toArray(): Float32Array {
-    return new Float32Array([this.r, this.g, this.b, 1.0])
+    return new Float32Array([this.r, this.g, this.b, this.a])
   }
 }
