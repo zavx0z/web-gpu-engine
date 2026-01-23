@@ -1,8 +1,10 @@
 import { Scene } from "../scenes/Scene"
 import { ViewPoint } from "../core/ViewPoint"
 import { Mesh } from "../core/Mesh"
+import { InstancedMesh } from "../core/InstancedMesh"
 import { SkinnedMesh } from "../core/SkinnedMesh"
 import { BufferGeometry } from "../core/BufferGeometry"
+import { WireframeInstancedMesh } from "../core/WireframeInstancedMesh"
 import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
 import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Matrix4 } from "../math/Matrix4"
@@ -14,6 +16,7 @@ import { Text } from "../objects/Text"
 import { TextMaterial } from "../materials/TextMaterial"
 import meshStaticWGSL from "./shaders/mesh_static.wgsl" with { type: "text" }
 import meshSkinnedWGSL from "./shaders/mesh_skinned.wgsl" with { type: "text" }
+import meshInstancedWGSL from "./shaders/mesh_instanced.wgsl" with { type: "text" }
 
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
 
@@ -36,13 +39,14 @@ const PER_OBJECT_DATA_SIZE = PER_OBJECT_UNIFORM_SIZE + BONE_MATRICES_SIZE;
 const LIGHT_STRUCT_SIZE = 32
 
 // --- Вспомогательные интерфейсы ---
-interface GeometryBuffers {
+  interface GeometryBuffers {
   positionBuffer: GPUBuffer
   normalBuffer?: GPUBuffer
   indexBuffer?: GPUBuffer
   colorBuffer?: GPUBuffer
   skinIndexBuffer?: GPUBuffer
   skinWeightBuffer?: GPUBuffer
+  instanceMatrixBuffer?: GPUBuffer // для инстансированных мешей
 }
 
 /**
@@ -58,8 +62,10 @@ export class Renderer {
   private context: GPUCanvasContext | null = null
   private presentationFormat: GPUTextureFormat | null = null
   private staticMeshPipeline: GPURenderPipeline | null = null
+  private instancedMeshPipeline: GPURenderPipeline | null = null
   private skinnedMeshPipeline: GPURenderPipeline | null = null
   private linePipeline: GPURenderPipeline | null = null
+  private instancedLinePipeline: GPURenderPipeline | null = null
   private textStencilPipeline: GPURenderPipeline | null = null
   private textCoverPipeline: GPURenderPipeline | null = null
 
@@ -191,6 +197,9 @@ export class Renderer {
     const staticShaderModule = this.device.createShaderModule({
       code: meshStaticWGSL,
     })
+    const instancedShaderModule = this.device.createShaderModule({
+      code: meshInstancedWGSL,
+    })
     const skinnedShaderModule = this.device.createShaderModule({
       code: meshSkinnedWGSL,
     })
@@ -216,6 +225,44 @@ export class Renderer {
       },
       fragment: {
         module: staticShaderModule,
+        entryPoint: "fs_main",
+        targets: [{ format: this.presentationFormat }],
+      },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: {
+        depthWriteEnabled: true,
+        depthCompare: "less",
+        format: "depth24plus-stencil8",
+      },
+      multisample: { count: this.sampleCount },
+    })
+
+    // --- Pipeline для Instanced Meshes ---
+    this.instancedMeshPipeline = await this.device.createRenderPipelineAsync({
+      layout: pipelineLayout,
+      vertex: {
+        module: instancedShaderModule,
+        entryPoint: "vs_main",
+        buffers: [
+          // position
+          { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+          // normal
+          { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+          // instance matrix (4 vec4)
+          {
+            arrayStride: 64,
+            stepMode: "instance",
+            attributes: [
+              { shaderLocation: 2, offset: 0, format: "float32x4" },
+              { shaderLocation: 3, offset: 16, format: "float32x4" },
+              { shaderLocation: 4, offset: 32, format: "float32x4" },
+              { shaderLocation: 5, offset: 48, format: "float32x4" },
+            ],
+          },
+        ],
+      },
+      fragment: {
+        module: instancedShaderModule,
         entryPoint: "fs_main",
         targets: [{ format: this.presentationFormat }],
       },
@@ -298,6 +345,143 @@ export class Renderer {
       multisample: { count: this.sampleCount },
     })
 
+    // --- Pipeline для Instanced Lines ---
+    const lineInstancedWGSL = `
+struct GlobalUniforms { viewProjectionMatrix: mat4x4<f32> };
+@binding(0) @group(0) var<uniform> globalUniforms: GlobalUniforms;
+
+struct Light {
+  position: vec4<f32>,
+  color: vec4<f32>,
+};
+struct SceneUniforms {
+    viewMatrix: mat4x4<f32>,
+    viewNormalMatrix: mat4x4<f32>,
+    numLights: u32,
+    lights: array<Light, 4>,
+    cameraPosition: vec3<f32>,
+    padding: f32,
+};
+@binding(1) @group(0) var<uniform> sceneUniforms: SceneUniforms;
+
+struct PerObjectUniforms {
+  modelMatrix: mat4x4<f32>,
+  color: vec4<f32>,
+  glowIntensity: f32,
+  _padding: vec3<f32>, // для выравнивания после glowIntensity
+  glowColor: vec4<f32>
+};
+@binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
+
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) worldPosition: vec3<f32>,
+  @location(1) vertexColor: vec4<f32>,
+};
+
+@vertex
+fn vs_main(
+    @location(0) pos: vec3<f32>,
+    @location(1) color: vec4<f32>,
+    @location(2) instanceMatrix0: vec4<f32>,
+    @location(3) instanceMatrix1: vec4<f32>,
+    @location(4) instanceMatrix2: vec4<f32>,
+    @location(5) instanceMatrix3: vec4<f32>
+) -> VertexOutput {
+  var out: VertexOutput;
+  // Собираем матрицу инстанса из 4 векторов
+  let instanceMatrix = mat4x4<f32>(
+      instanceMatrix0,
+      instanceMatrix1,
+      instanceMatrix2,
+      instanceMatrix3
+  );
+  // Комбинируем матрицу объекта и матрицу инстанса
+  let worldMatrix = perObject.modelMatrix * instanceMatrix;
+  let worldPos = (worldMatrix * vec4<f32>(pos, 1.0)).xyz;
+  out.position = globalUniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
+  out.worldPosition = worldPos;
+  out.vertexColor = color * perObject.color;
+  return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+  let distance = distance(in.worldPosition, sceneUniforms.cameraPosition);
+
+  // Базовое затухание для обычных линий
+  let baseFade = exp(-0.5 * distance);
+
+  // Эффект свечения: затухание намного медленнее
+  let glowFade = exp(-0.5 * distance / perObject.glowIntensity);
+
+  // Смешиваем базовое затухание и свечение в зависимости от интенсивности
+  let finalFade = mix(baseFade, glowFade, min(perObject.glowIntensity * 0.5, 1.0));
+
+  // Используем цвет свечения если он задан, иначе цвет вершины
+  let glowColor = perObject.glowColor;
+  let useGlowColor = glowColor.a > 0.5; // Увеличиваем порог для надежности
+  let finalColor = select(in.vertexColor.rgb, glowColor.rgb, useGlowColor);
+
+  return vec4<f32>(finalColor * finalFade, in.vertexColor.a * finalFade);
+}
+    `;
+
+    const lineInstancedShaderModule = this.device.createShaderModule({
+      code: lineInstancedWGSL,
+    });
+
+    this.instancedLinePipeline = await this.device.createRenderPipelineAsync({
+      layout: pipelineLayout,
+      vertex: {
+        module: lineInstancedShaderModule,
+        entryPoint: "vs_main",
+        buffers: [
+          // position
+          { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+          // color
+          { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+          // instance matrix (4 vec4)
+          {
+            arrayStride: 64,
+            stepMode: "instance",
+            attributes: [
+              { shaderLocation: 2, offset: 0, format: "float32x4" },
+              { shaderLocation: 3, offset: 16, format: "float32x4" },
+              { shaderLocation: 4, offset: 32, format: "float32x4" },
+              { shaderLocation: 5, offset: 48, format: "float32x4" },
+            ],
+          },
+        ],
+      },
+      fragment: {
+        module: lineInstancedShaderModule,
+        entryPoint: "fs_main",
+        targets: [{
+          format: this.presentationFormat,
+          blend: {
+            color: {
+              srcFactor: "src-alpha",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            },
+            alpha: {
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            }
+          }
+        }],
+      },
+      primitive: { topology: "line-list" },
+      depthStencil: {
+        depthWriteEnabled: false,
+        depthCompare: "less",
+        format: "depth24plus-stencil8",
+      },
+      multisample: { count: this.sampleCount },
+    })
+
     // --- Pipelines для Text ---
     this.textStencilPipeline = await this.device.createRenderPipelineAsync({
       layout: pipelineLayout,
@@ -362,8 +546,10 @@ export class Renderer {
       !this.device ||
       !this.context ||
       !this.staticMeshPipeline ||
+      !this.instancedMeshPipeline ||
       !this.skinnedMeshPipeline ||
       !this.linePipeline ||
+      !this.instancedLinePipeline ||
       !this.textStencilPipeline ||
       !this.textCoverPipeline ||
       !this.globalUniformBuffer ||
@@ -411,35 +597,34 @@ export class Renderer {
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
 
     // --- Сортировка списка рендеринга для минимизации смены конвейера ---
-    const pipelineOrder: { [key: string]: number } = {
+    const pipelineOrder: Record<string, number> = {
       "static-mesh": 0,
-      "skinned-mesh": 1,
-      line: 2,
-      "text-stencil": 3,
-      "text-cover": 4,
+      "instanced-mesh": 1,
+      "skinned-mesh": 2,
+      "instanced-line": 3,
+      "line": 4,
+      "text-stencil": 5,
+      "text-cover": 6,
     }
 
     // Мы должны сохранить оригинальный индекс для правильного смещения в uniform-буфере
     const indexedRenderList = renderList.map((item, index) => ({ item, originalIndex: index }))
     indexedRenderList.sort((a, b) => {
-      let typeA = a.item.type
-      let typeB = b.item.type
-      if (typeA === "mesh") {
-        typeA = (a.item.object as SkinnedMesh).isSkinnedMesh ? "skinned-mesh" : "static-mesh"
-      }
-      if (typeB === "mesh") {
-        typeB = (b.item.object as SkinnedMesh).isSkinnedMesh ? "skinned-mesh" : "static-mesh"
-      }
-      // Приводим типы к any, чтобы обойти проверку TypeScript
-      // так как мы знаем, что typeA и typeB будут ключами pipelineOrder
-      return pipelineOrder[typeA as any] - pipelineOrder[typeB as any]
+      return (pipelineOrder[a.item.type] || 0) - (pipelineOrder[b.item.type] || 0)
     })
 
     // --- Pass 1: Update CPU Data ---
     for (const { item, originalIndex } of indexedRenderList) {
-      switch (item.type) {
-        case "mesh":
+        switch (item.type) {
+        case "static-mesh":
+        case "skinned-mesh":
           this.renderMesh(null, item.object as Mesh, item.worldMatrix, originalIndex)
+          break
+        case "instanced-mesh":
+          this.renderInstancedMesh(null, item.object as InstancedMesh, item.worldMatrix, originalIndex)
+          break
+        case "instanced-line":
+          this.renderInstancedLines(null, item.object as WireframeInstancedMesh, item.worldMatrix, originalIndex)
           break
         case "line":
           this.renderLines(null, item.object as LineSegments, item.worldMatrix, originalIndex)
@@ -455,7 +640,8 @@ export class Renderer {
 
     // --- Upload Data ---
     if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
-      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, this.perObjectDataCPU)
+      const uploadData = this.perObjectDataCPU.buffer
+      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
     }
 
     // --- Pass 2: Render ---
@@ -468,10 +654,17 @@ export class Renderer {
 
       // Определяем, какой конвейер нужен для текущего объекта
       switch (item.type) {
-        case "mesh":
-          pipeline = (item.object as SkinnedMesh).isSkinnedMesh
-            ? this.skinnedMeshPipeline
-            : this.staticMeshPipeline
+        case "static-mesh":
+          pipeline = this.staticMeshPipeline
+          break
+        case "skinned-mesh":
+          pipeline = this.skinnedMeshPipeline
+          break
+        case "instanced-mesh":
+          pipeline = this.instancedMeshPipeline
+          break
+        case "instanced-line":
+          pipeline = this.instancedLinePipeline
           break
         case "line":
           pipeline = this.linePipeline
@@ -495,8 +688,15 @@ export class Renderer {
 
       // Выполняем соответствующий вызов отрисовки
       switch (item.type) {
-        case "mesh":
+        case "static-mesh":
+        case "skinned-mesh":
           this.renderMesh(passEncoder, item.object as Mesh, item.worldMatrix, originalIndex)
+          break
+        case "instanced-mesh":
+          this.renderInstancedMesh(passEncoder, item.object as InstancedMesh, item.worldMatrix, originalIndex)
+          break
+        case "instanced-line":
+          this.renderInstancedLines(passEncoder, item.object as WireframeInstancedMesh, item.worldMatrix, originalIndex)
           break
         case "line":
           this.renderLines(passEncoder, item.object as LineSegments, item.worldMatrix, originalIndex)
@@ -612,6 +812,18 @@ export class Renderer {
       skinWeightBuffer.unmap();
     }
 
+    // Для InstancedMesh создаем буфер для матриц инстансов
+    let instanceMatrixBuffer: GPUBuffer | undefined;
+    if (geometry.attributes.instanceMatrix && geometry.attributes.instanceMatrix.array.length > 0) {
+      instanceMatrixBuffer = this.device.createBuffer({
+        size: (geometry.attributes.instanceMatrix.array.byteLength + 3) & ~3,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Float32Array(instanceMatrixBuffer.getMappedRange()).set(geometry.attributes.instanceMatrix.array);
+      instanceMatrixBuffer.unmap();
+    }
+
     let colorBuffer: GPUBuffer | undefined
     if (geometry.attributes.color) {
       colorBuffer = this.device.createBuffer({
@@ -656,6 +868,7 @@ export class Renderer {
       indexBuffer,
       skinIndexBuffer,
       skinWeightBuffer,
+      instanceMatrixBuffer,
     }
 
     this.geometryCache.set(geometry, buffers)
@@ -712,6 +925,54 @@ export class Renderer {
     }
   }
 
+  private renderInstancedMesh(
+    passEncoder: GPURenderPassEncoder | null,
+    mesh: InstancedMesh,
+    worldMatrix: Matrix4,
+    renderIndex: number
+  ): void {
+    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+    if (!material.visible) return
+
+    const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
+    const offsetFloats = dynamicOffset / 4
+
+    const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
+
+    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats) // modelMatrix
+    this.perObjectDataCPU.set(normalMatrix.elements, offsetFloats + 16) // normalMatrix
+
+    if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
+      this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 32)
+    }
+
+    if (passEncoder) {
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
+
+      const { positionBuffer, normalBuffer, indexBuffer, instanceMatrixBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
+
+      passEncoder.setVertexBuffer(0, positionBuffer)
+      if (normalBuffer) {
+        passEncoder.setVertexBuffer(1, normalBuffer)
+      }
+      
+      // Устанавливаем буфер матриц инстансов
+      if (instanceMatrixBuffer) {
+        passEncoder.setVertexBuffer(2, instanceMatrixBuffer)
+      }
+
+      if (indexBuffer) {
+        const indexFormat = mesh.geometry.index!.array instanceof Uint32Array ? "uint32" : "uint16"
+        passEncoder.setIndexBuffer(indexBuffer, indexFormat)
+        passEncoder.drawIndexed(mesh.geometry.index!.count, mesh.count)
+      } else {
+        passEncoder.draw(mesh.geometry.attributes.position.count, mesh.count)
+      }
+    }
+  }
+
   private renderLines(
     passEncoder: GPURenderPassEncoder | null,
     lines: LineSegments,
@@ -761,6 +1022,55 @@ export class Renderer {
       passEncoder.setVertexBuffer(0, positionBuffer)
       passEncoder.setVertexBuffer(1, colorBuffer || positionBuffer)
       passEncoder.draw(lines.geometry.attributes.position.count)
+    }
+  }
+
+  private renderInstancedLines(
+    passEncoder: GPURenderPassEncoder | null,
+    lines: WireframeInstancedMesh,
+    worldMatrix: Matrix4,
+    renderIndex: number
+  ): void {
+    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
+    
+    const material = lines.material
+    const isLineGlow = material instanceof LineGlowMaterial
+    
+    if (!isLineGlow || !material.visible) return
+
+    const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
+    const offsetFloats = dynamicOffset / 4
+    
+    // Записываем матрицу модели (16 floats)
+    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
+    
+    // Записываем цвет материала с opacity (4 floats)
+    this.perObjectDataCPU.set([...material.color.toArray(), material.opacity], offsetFloats + 16)
+    
+    // Записываем параметры свечения
+    let glowIntensity = material.glowIntensity
+    let glowColor = new Float32Array([0, 0, 0, 0])
+    if (material.glowColor) {
+      glowColor = new Float32Array(material.glowColor.toArray())
+    }
+
+    // glowIntensity (1 float) и padding (3 floats)
+    this.perObjectDataCPU.set([glowIntensity, 0, 0, 0], offsetFloats + 20)
+    
+    // glowColor (4 floats)
+    this.perObjectDataCPU.set(glowColor, offsetFloats + 24)
+
+    if (passEncoder) {
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
+      const { positionBuffer, colorBuffer, instanceMatrixBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
+
+      passEncoder.setVertexBuffer(0, positionBuffer)
+      passEncoder.setVertexBuffer(1, colorBuffer || positionBuffer)
+      if (instanceMatrixBuffer) {
+        passEncoder.setVertexBuffer(2, instanceMatrixBuffer)
+      }
+      passEncoder.draw(lines.geometry.attributes.position.count, lines.count)
     }
   }
 

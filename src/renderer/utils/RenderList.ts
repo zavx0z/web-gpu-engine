@@ -1,15 +1,16 @@
 import { Object3D } from "../../core/Object3D"
 import { Mesh } from "../../core/Mesh"
+import { InstancedMesh } from "../../core/InstancedMesh"
 import { LineSegments } from "../../objects/LineSegments"
 import { Text } from "../../objects/Text"
 import { Light } from "../../lights/Light"
 import { Matrix4 } from "../../math/Matrix4"
-
-import { SkinnedMesh } from "../../core/SkinnedMesh";
+import { SkinnedMesh } from "../../core/SkinnedMesh"
+import { WireframeInstancedMesh } from "../../core/WireframeInstancedMesh";
 
 export interface RenderItem {
-  type: "mesh" | "line" | "text-stencil" | "text-cover"
-  object: Mesh | SkinnedMesh | LineSegments | Text
+  type: "static-mesh" | "skinned-mesh" | "instanced-mesh" | "instanced-line" | "line" | "text-stencil" | "text-cover"
+  object: Mesh | InstancedMesh | SkinnedMesh | LineSegments | Text | WireframeInstancedMesh
   worldMatrix: Matrix4
 }
 
@@ -27,8 +28,14 @@ export function collectSceneObjects(
 
   const worldMatrix = object.matrixWorld;
 
-  if (object instanceof Mesh) { // SkinnedMesh is also an instance of Mesh
-    renderList.push({ type: "mesh", object, worldMatrix })
+  if (object instanceof InstancedMesh) {
+    renderList.push({ type: "instanced-mesh", object, worldMatrix })
+  } else if (object instanceof WireframeInstancedMesh) {
+    renderList.push({ type: "instanced-line", object, worldMatrix })
+  } else if (object instanceof SkinnedMesh) {
+    renderList.push({ type: "skinned-mesh", object, worldMatrix })
+  } else if (object instanceof Mesh) {
+    renderList.push({ type: "static-mesh", object, worldMatrix })
   } else if (object instanceof LineSegments) {
     renderList.push({ type: "line", object, worldMatrix })
   } else if (object instanceof Text) {

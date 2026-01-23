@@ -45,7 +45,7 @@ export class BufferAttribute {
 export class BufferGeometry {
   /**
    * Словарь активных атрибутов.
-   * Ключи соответствуют именам переменных в шейдере (`position`, `normal`, `uv`).
+   * Ключи соответствуют именам переменных в шейдере (`position`, `normal`, `uv`, `instanceMatrix`).
    */
   public attributes: { [name: string]: BufferAttribute } = {}
 

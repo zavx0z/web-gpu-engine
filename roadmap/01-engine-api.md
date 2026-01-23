@@ -35,7 +35,7 @@
    - `mesh_instanced.wgsl`: Шейдер, поддерживающий чтение атрибутов экземпляра (матрица трансформации) и их применение к вершинам.
    - Обновить `Renderer.ts` для поддержки отрисовки `InstancedMesh`.
 
-6. **Public API**
+6. ✅  **Public API**
    - В `src/index.ts`: Экспортировать новые классы (`PlaneGeometry`, `SphereGeometry`, `GlowMaterial`).
    - Убедиться, что `TorusGeometry` экспортирован.
 

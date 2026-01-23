@@ -22,7 +22,7 @@
   // Включаем в проверку и движок, и примеры
   "include": [
     "src",
-    "examples",
+    "examples/*",
     "global.d.ts"
   ]
 }

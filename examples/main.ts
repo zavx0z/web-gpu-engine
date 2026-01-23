@@ -18,7 +18,10 @@ import {
   LineGlowMaterial,
   BufferGeometry,
   BufferAttribute,
+  WireframeInstancedMesh,
+  MeshLambertMaterial,
 } from "../src"
+import { Matrix4 } from "../src/math/Matrix4"
 import { Vector3 } from "../src/math/Vector3"
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -166,6 +169,43 @@ document.addEventListener("DOMContentLoaded", async () => {
   torus.position.set(0, 0, 1)
   torus.updateMatrix()
   scene.add(torus)
+
+  // Демонстрация Instancing: создаем инстансированный меш с 50 сферами
+  const instanceCount = 50
+  const instancedSpheres = new WireframeInstancedMesh(
+    sphereWireframe,
+    new LineGlowMaterial({
+      color: new Color("rgba(252, 119, 70, 0.52)"),
+      glowIntensity: 1.4,
+      glowColor: new Color("rgba(255, 255, 255, 1)"),
+    }),
+    instanceCount,
+  )
+
+  // Располагаем инстансы по кругу
+  const tempMatrix = new Matrix4()
+  const tempVector = new Vector3()
+  for (let i = 0; i < instanceCount; i++) {
+    const angle = (i / instanceCount) * Math.PI * 2
+    const radius = 1.0
+    const x = Math.cos(angle) * radius
+    const y = Math.sin(angle) * radius
+    const z = 1.0
+
+    tempMatrix.identity()
+    tempMatrix.makeTranslation(x, y, z)
+
+    // Можно также добавить случайное масштабирование и вращение
+    const scale = 0.5 + Math.random() * 0.5
+    tempVector.set(scale, scale, scale)
+    tempMatrix.scale(tempVector)
+
+    instancedSpheres.setMatrixAt(i, tempMatrix)
+  }
+
+  instancedSpheres.position.set(0, 0, 0)
+  instancedSpheres.updateMatrix()
+  scene.add(instancedSpheres)
 
   // Переменные для wiggli эффекта (только дрожание)
   let time = 0
