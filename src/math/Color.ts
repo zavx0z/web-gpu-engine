@@ -22,17 +22,23 @@ export class Color {
 
   /**
    * Создает экземпляр Color.
-   * @param r - Значение красного (0-1), шестнадцатеричное значение, или другой экземпляр Color.
-   * @param g - Значение зеленого (0-1).
-   * @param b - Значение синего (0-1).
+   * @param r - Значение красного (0-255 или 0-1), шестнадцатеричное значение (число или строка), или другой экземпляр Color.
+   * @param g - Значение зеленого (0-255 или 0-1).
+   * @param b - Значение синего (0-255 или 0-1).
+   * @note Если значения больше 1, они автоматически делятся на 255 для нормализации.
+   *       Строки вида "#3147ea" или "#fff" также поддерживаются.
    */
-  constructor(r?: number | Color, g?: number, b?: number) {
+  constructor(r?: number | string | Color, g?: number, b?: number) {
     if (r instanceof Color) {
       this.copy(r)
+    } else if (typeof r === 'string') {
+      this.setHexString(r)
     } else if (g === undefined && b === undefined) {
       this.setHex(r ?? 0xffffff)
     } else {
-      this.setRGB(r as number, g!, b!)
+      // Автоматически нормализуем значения, если они больше 1
+      const normalize = (value: number) => value > 1 ? value / 255 : value;
+      this.setRGB(normalize(r as number), normalize(g!), normalize(b!))
     }
   }
 
@@ -81,6 +87,30 @@ export class Color {
     this.g = ((hex >> 8) & 255) / 255
     this.b = (hex & 255) / 255
     return this
+  }
+
+  /**
+   * Устанавливает цвет из строки шестнадцатеричного значения.
+   * @param hexString - Строка шестнадцатеричного значения (например, "#ff0000" или "#fff").
+   * @returns Возвращает этот экземпляр для чейнинга.
+   */
+  public setHexString(hexString: string): this {
+    // Удаляем символ # если есть
+    hexString = hexString.replace(/^#/, '')
+
+    // Обработка короткой формы (3 символа)
+    if (hexString.length === 3) {
+      hexString = hexString.split('').map(ch => ch + ch).join('')
+    }
+
+    // Конвертируем строку в число
+    const hex = parseInt(hexString, 16)
+    if (isNaN(hex)) {
+      console.warn(`Invalid hex color string: ${hexString}, falling back to white`)
+      return this.setHex(0xffffff)
+    }
+
+    return this.setHex(hex)
   }
 
   /**

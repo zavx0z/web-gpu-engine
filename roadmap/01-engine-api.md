@@ -27,7 +27,7 @@
    - `SphereGeometry.ts`: (New) Генерация вершин сферы (для отображения значений).
    - `TorusGeometry.ts`: (Existing) Визуализация контейнеров.
 
-4. **Effects Material**
+4. ✅ **Effects Material**
    - `GlowMaterial.ts`: Класс материала с параметрами `color` и `intensity`. (Пока можно использовать заглушку, наследующуюся от Material, с базовым цветом, шейдер добавим позже).
 
 5. **Instancing Support**

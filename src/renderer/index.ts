@@ -414,7 +414,9 @@ export class Renderer {
       if (typeB === "mesh") {
         typeB = (b.item.object as SkinnedMesh).isSkinnedMesh ? "skinned-mesh" : "static-mesh"
       }
-      return pipelineOrder[typeA] - pipelineOrder[typeB]
+      // Приводим типы к any, чтобы обойти проверку TypeScript
+      // так как мы знаем, что typeA и typeB будут ключами pipelineOrder
+      return pipelineOrder[typeA as any] - pipelineOrder[typeB as any]
     })
 
     // --- Pass 1: Update CPU Data ---
@@ -436,7 +438,7 @@ export class Renderer {
     }
 
     // --- Upload Data ---
-    if (this.perObjectDataCPU) {
+    if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
       this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, this.perObjectDataCPU)
     }
 
@@ -463,6 +465,9 @@ export class Renderer {
           break
         case "text-cover":
           pipeline = this.textCoverPipeline
+          break
+        default:
+          pipeline = null
           break
       }
 
@@ -626,7 +631,7 @@ export class Renderer {
     this.perObjectDataCPU.set(normalMatrix.elements, offsetFloats + 16) // normalMatrix
 
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
-      this.perObjectDataCPU.set(material.color.toArray(), offsetFloats + 32)
+      this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 32)
     }
 
     const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0;
@@ -677,7 +682,7 @@ export class Renderer {
 
     // Записываем цвет материала
     const material = lines.material
-    this.perObjectDataCPU.set(material.color.toArray(), offsetFloats + 16) // после матрицы (16 floats)
+    this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 16) // после матрицы (16 floats)
 
     if (passEncoder) {
       const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
@@ -704,7 +709,7 @@ export class Renderer {
     const offsetFloats = dynamicOffset / 4
     this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
     if (!isStencil) {
-      this.perObjectDataCPU.set((text.material as TextMaterial).color.toArray(), offsetFloats + 32)
+      this.perObjectDataCPU.set([...(text.material as TextMaterial).color.toArray(), 1.0], offsetFloats + 32)
     }
 
     if (passEncoder) {

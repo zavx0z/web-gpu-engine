@@ -11,5 +11,9 @@
         "**/__pycache__": true,
         ".venv": true
     },
-    "hide-files.files": []
+    "hide-files.files": [],
+    "colorize.languages": [
+        "javascript",
+        "typescript"
+    ]
 }

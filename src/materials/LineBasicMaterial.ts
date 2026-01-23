@@ -9,7 +9,7 @@ export interface LineBasicMaterialParameters extends MaterialParameters {
    * Цвет линии в формате RGB.
    * @default 0xffffff
    */
-  color?: number
+  color?: number | Color
 }
 
 /**
@@ -24,6 +24,10 @@ export class LineBasicMaterial extends Material {
    */
   constructor(parameters: LineBasicMaterialParameters = {}) {
     super(parameters)
-    this.color = new Color(parameters.color ?? 0xffffff)
+    if (parameters.color instanceof Color) {
+      this.color = parameters.color.clone()
+    } else {
+      this.color = new Color(parameters.color ?? 0xffffff)
+    }
   }
 }
