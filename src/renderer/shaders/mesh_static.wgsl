@@ -13,6 +13,8 @@ struct SceneUniforms {
     viewNormalMatrix: mat4x4<f32>,
     numLights: u32,
     lights: array<Light, 4>,
+    cameraPosition: vec3<f32>,
+    padding: f32,
 };
 @binding(1) @group(0) var<uniform> sceneUniforms: SceneUniforms;
 

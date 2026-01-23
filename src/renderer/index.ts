@@ -30,8 +30,8 @@ const MAX_BONES = 128;
 const BONE_MATRICES_SIZE = MAX_BONES * 16 * 4; // 128 * mat4x4<f32>
 const PER_OBJECT_DATA_SIZE = PER_OBJECT_UNIFORM_SIZE + BONE_MATRICES_SIZE;
 
-// --- Размеры и смещения для данных сцены ---
-const SCENE_UNIFORMS_SIZE = 272
+    // --- Размеры и смещения для данных сцены ---
+    const SCENE_UNIFORMS_SIZE = 272 + 16 // + vec3<f32> cameraPosition + f32 padding
 const LIGHT_STRUCT_SIZE = 32
 
 // --- Вспомогательные интерфейсы ---
@@ -266,6 +266,7 @@ export class Renderer {
         entryPoint: "vs_main",
         buffers: [
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
+          { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
         ],
       },
       fragment: {
@@ -514,6 +515,21 @@ export class Renderer {
 
     uint32View[32] = Math.min(lights.length, MAX_LIGHTS)
 
+    // Вычисляем позицию камеры в мировых координатах из viewMatrix
+    // cameraPosition = -transpose(rotationPart) * translationPart
+    const te = viewMatrix.elements
+    const tx = te[12]
+    const ty = te[13]
+    const tz = te[14]
+    const cameraPosition = new Vector3(
+      - (te[0] * tx + te[1] * ty + te[2] * tz),
+      - (te[4] * tx + te[5] * ty + te[6] * tz),
+      - (te[8] * tx + te[9] * ty + te[10] * tz)
+    )
+    // Записываем cameraPosition после lights (36 + 4*32 = 164)
+    // 36 + 4*32 = 164 байта, что соответствует 41 элементу float32 (164/4 = 41)
+    float32View.set([cameraPosition.x, cameraPosition.y, cameraPosition.z], 41)
+
     const lightsArrayOffset = 36
     for (let i = 0; i < uint32View[32]; i++) {
       const lightItem = lights[i]
@@ -589,6 +605,20 @@ export class Renderer {
         mappedAtCreation: true,
       })
       new Float32Array(colorBuffer.getMappedRange()).set(geometry.attributes.color.array)
+      colorBuffer.unmap()
+    } else {
+      // Для линий создаем буфер цвета, заполненный единицами (белый цвет)
+      const vertexCount = geometry.attributes.position.count
+      const defaultColors = new Float32Array(vertexCount * 3)
+      for (let i = 0; i < vertexCount * 3; i++) {
+        defaultColors[i] = 1.0
+      }
+      colorBuffer = this.device.createBuffer({
+        size: (defaultColors.byteLength + 3) & ~3,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      })
+      new Float32Array(colorBuffer.getMappedRange()).set(defaultColors)
       colorBuffer.unmap()
     }
 
@@ -687,9 +717,10 @@ export class Renderer {
     if (passEncoder) {
       const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
-      const { positionBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
+      const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
       passEncoder.setVertexBuffer(0, positionBuffer)
+      passEncoder.setVertexBuffer(1, colorBuffer || positionBuffer) // Если colorBuffer отсутствует, используем positionBuffer (данные игнорируются)
       passEncoder.draw(lines.geometry.attributes.position.count)
     }
   }
