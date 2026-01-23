@@ -29,6 +29,11 @@ export class BufferAttribute {
   public normalized: boolean
 
   /**
+   * Флаг, указывающий, что данные атрибута изменились и требуют обновления на GPU.
+   */
+  public needsUpdate: boolean = false
+
+  /**
    * @param array - TypedArray с данными.
    * @param itemSize - Компонентов на вершину. Ограничение: `[1 ... 4]`.
    * @param normalized - Авто-нормализация значений GPU.

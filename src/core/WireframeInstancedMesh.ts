@@ -13,6 +13,7 @@ export class WireframeInstancedMesh extends Object3D {
   public instanceMaterialParams: Float32Array
   public count: number
   private instanceBufferNeedsUpdate: boolean = false
+  private instanceCombinedBuffer: Float32Array
 
   constructor(geometry: BufferGeometry, material: LineGlowMaterial | LineGlowMaterial[], count: number) {
     super()
@@ -35,6 +36,8 @@ export class WireframeInstancedMesh extends Object3D {
     // Инициализируем буферы
     this.instanceMatrix = new Float32Array(count * 16)
     this.instanceMaterialParams = new Float32Array(count * 9) // 9 floats на инстанс: color(4), glowIntensity(1), glowColor(4)
+    this.instanceCombinedBuffer = new Float32Array(count * 25)
+    this.geometry.setAttribute("instanceBuffer", new BufferAttribute(this.instanceCombinedBuffer, 25))
 
     // Инициализируем единичными матрицами и параметрами материалов
     for (let i = 0; i < count; i++) {
@@ -154,8 +157,7 @@ export class WireframeInstancedMesh extends Object3D {
   }
 
   public updateInstanceBuffer(): void {
-    // Создаем объединенный буфер: матрица (16 floats) + параметры материала (9 floats) = 25 floats на инстанс
-    const instanceBuffer = new Float32Array(this.count * 25)
+    const instanceBuffer = this.instanceCombinedBuffer
 
     for (let i = 0; i < this.count; i++) {
       const instanceOffset = i * 25
@@ -169,8 +171,10 @@ export class WireframeInstancedMesh extends Object3D {
       instanceBuffer.set(this.instanceMaterialParams.subarray(materialOffset, materialOffset + 9), instanceOffset + 16)
     }
 
-    // Устанавливаем атрибут в геометрию
-    this.geometry.setAttribute("instanceBuffer", new BufferAttribute(instanceBuffer, 25))
+    // Устанавливаем флаг обновления для существующего атрибута
+    if (this.geometry.attributes.instanceBuffer) {
+      this.geometry.attributes.instanceBuffer.needsUpdate = true
+    }
     this.instanceBufferNeedsUpdate = false
   }
 

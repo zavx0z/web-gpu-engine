@@ -14,6 +14,7 @@ export class BufferAttribute {
    * Прямая ссылка на типизированный массив данных.
    * Изменение значений здесь требует установки флага обновления (в будущих версиях).
    */
+  public needsUpdate: boolean = false
   public array: TypedArray
 
   /**
@@ -26,6 +27,11 @@ export class BufferAttribute {
    * Общее число вершин в атрибуте (read-only derived).
    */
   public count: number
+
+  /**
+   * Флаг необходимости обновления данных на GPU.
+   */
+  public needsUpdate: boolean = false
 
   /**
    * @param array - Данные. Передаются по ссылке (не клонируются).

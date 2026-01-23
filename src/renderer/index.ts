@@ -39,7 +39,7 @@ const SCENE_UNIFORMS_SIZE = 272 + 16 // + vec3<f32> cameraPosition + f32 padding
 const LIGHT_STRUCT_SIZE = 32
 
 // --- Вспомогательные интерфейсы ---
-  interface GeometryBuffers {
+interface GeometryBuffers {
   positionBuffer: GPUBuffer
   normalBuffer?: GPUBuffer
   indexBuffer?: GPUBuffer
@@ -792,7 +792,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
   }
 
   private getOrCreateGeometryBuffers(geometry: BufferGeometry): GeometryBuffers {
-    if (this.geometryCache.has(geometry)) return this.geometryCache.get(geometry)!
+    if (this.geometryCache.has(geometry)) {
+      const buffers = this.geometryCache.get(geometry)!
+
+      // Проверяем, нужно ли обновить буфер инстансов
+      if (
+        geometry.attributes.instanceBuffer &&
+        geometry.attributes.instanceBuffer.needsUpdate &&
+        buffers.instanceBuffer
+      ) {
+        this.device!.queue.writeBuffer(
+          buffers.instanceBuffer,
+          0,
+          geometry.attributes.instanceBuffer.array as any,
+        )
+        geometry.attributes.instanceBuffer.needsUpdate = false
+      }
+
+      return buffers
+    }
 
     if (!this.device) throw new Error("Device not initialized")
 

@@ -278,10 +278,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Обновляем буфер инстансов с новыми матрицами
     spheresInsideTorus.update()
     
-    // Очищаем кэш геометрии в рендерере, чтобы он пересоздал буферы с новыми данными
-    // Это заставит рендерер создать новые буферы GPU с обновленными данными
-    renderer.geometryCache.delete(spheresInsideTorus.geometry)
-
     // Обновление матриц
     torus.updateMatrix()
     spheresInsideTorus.updateMatrix()
