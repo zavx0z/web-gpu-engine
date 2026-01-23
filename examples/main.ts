@@ -19,6 +19,7 @@ import {
   Mesh,
   LineSegments,
   LineBasicMaterial,
+  LineGlowMaterial,
   BufferGeometry,
   BufferAttribute,
 } from "../src"
@@ -98,7 +99,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // --- Добавление новых геометрий ---
   const plane = new Mesh(
     new PlaneGeometry({ width: 2, height: 2 }),
-    new MeshLambertMaterial({ color: new Color(0.2, 0.4, 0.7) }),
+    new MeshLambertMaterial({ color: new Color(33, 31, 50) }),
   )
   plane.position.set(0, 0, 0)
   plane.updateMatrix()
@@ -133,24 +134,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     return wireframeGeometry
   }
 
-  // Сфера как wireframe
+  // Сфера как wireframe с обычным материалом
   const sphereGeometry = new SphereGeometry({ radius: 0.04 })
   const sphere = new LineSegments(
     createWireframeGeometry(sphereGeometry),
     new LineBasicMaterial({ color: new Color(0.8, 0.3, 0.3) }),
   )
-  sphere.position.set(0, 0, 1)
+  sphere.position.set(-0.3, 0, 1)
   sphere.updateMatrix()
   scene.add(sphere)
 
-  // Тор как wireframe
+  // Тор как wireframe со светящимся материалом
   const torusGeometry = new TorusGeometry({ radius: 0.2, tube: 0.14 })
 
   const torus = new LineSegments(
     createWireframeGeometry(torusGeometry),
-    new LineBasicMaterial({ color: new Color("#7276f4") }),
+    new LineGlowMaterial({ 
+      color: new Color("#6779fa"),
+      glowIntensity: 1,
+      glowColor: new Color("#ffee00")
+    }),
   )
-  torus.position.set(0, 0, 1)
+  torus.position.set(0.3, 0, 1)
   torus.updateMatrix()
   scene.add(torus)
 

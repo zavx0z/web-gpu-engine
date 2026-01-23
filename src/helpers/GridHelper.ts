@@ -42,7 +42,10 @@ export class GridHelper extends LineSegments {
     geometry.setAttribute("position", new BufferAttribute(new Float32Array(vertices), 3))
     geometry.setAttribute("color", new BufferAttribute(new Float32Array(colors), 3))
 
-    const material = new LineBasicMaterial({ vertexColors: true })
+    const material = new LineBasicMaterial({ 
+      vertexColors: true,
+      opacity: 0.6 // Прозрачность для создания эффекта затухания
+    })
 
     super(geometry, material)
   }

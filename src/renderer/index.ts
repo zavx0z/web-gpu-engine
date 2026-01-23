@@ -8,6 +8,7 @@ import { MeshLambertMaterial } from "../materials/MeshLambertMaterial"
 import { Matrix4 } from "../math/Matrix4"
 import { LineSegments } from "../objects/LineSegments"
 import { LineBasicMaterial } from "../materials/LineBasicMaterial"
+import { LineGlowMaterial } from "../materials/LineGlowMaterial"
 import { Vector3 } from "../math/Vector3"
 import { Text } from "../objects/Text"
 import { TextMaterial } from "../materials/TextMaterial"
@@ -272,11 +273,25 @@ export class Renderer {
       fragment: {
         module: lineShaderModule,
         entryPoint: "fs_main",
-        targets: [{ format: this.presentationFormat }],
+        targets: [{
+          format: this.presentationFormat,
+          blend: {
+            color: {
+              srcFactor: "src-alpha",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            },
+            alpha: {
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            }
+          }
+        }],
       },
       primitive: { topology: "line-list" },
       depthStencil: {
-        depthWriteEnabled: true,
+        depthWriteEnabled: false, // Отключаем запись глубины для полупрозрачных линий
         depthCompare: "less",
         format: "depth24plus-stencil8",
       },
@@ -704,15 +719,39 @@ export class Renderer {
     renderIndex: number
   ): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
-    if (!(lines.material instanceof LineBasicMaterial) || !lines.material.visible) return
+    
+    const material = lines.material
+    const isLineBasic = material instanceof LineBasicMaterial
+    const isLineGlow = material instanceof LineGlowMaterial
+    
+    if (!(isLineBasic || isLineGlow) || !material.visible) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
     const offsetFloats = dynamicOffset / 4
+    
+    // Записываем матрицу модели (16 floats)
     this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
-
-    // Записываем цвет материала
-    const material = lines.material
-    this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 16) // после матрицы (16 floats)
+    
+    // Записываем цвет материала с opacity (4 floats)
+    this.perObjectDataCPU.set([...material.color.toArray(), material.opacity], offsetFloats + 16)
+    
+    // Записываем параметры свечения
+    let glowIntensity = 1.0
+    let glowColor = new Float32Array([0, 0, 0, 0])
+    
+    if (isLineGlow) {
+      glowIntensity = (material as LineGlowMaterial).glowIntensity
+      const glowColorObj = (material as LineGlowMaterial).glowColor
+      if (glowColorObj) {
+        glowColor = new Float32Array([...glowColorObj.toArray(), 1.0])
+      }
+    }
+    
+    // glowIntensity (1 float) и padding (3 floats)
+    this.perObjectDataCPU.set([glowIntensity, 0, 0, 0], offsetFloats + 20)
+    
+    // glowColor (4 floats)
+    this.perObjectDataCPU.set(glowColor, offsetFloats + 24)
 
     if (passEncoder) {
       const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
@@ -720,7 +759,7 @@ export class Renderer {
       const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
       passEncoder.setVertexBuffer(0, positionBuffer)
-      passEncoder.setVertexBuffer(1, colorBuffer || positionBuffer) // Если colorBuffer отсутствует, используем positionBuffer (данные игнорируются)
+      passEncoder.setVertexBuffer(1, colorBuffer || positionBuffer)
       passEncoder.draw(lines.geometry.attributes.position.count)
     }
   }

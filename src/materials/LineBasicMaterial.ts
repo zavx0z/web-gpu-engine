@@ -10,6 +10,11 @@ export interface LineBasicMaterialParameters extends MaterialParameters {
    * @default 0xffffff
    */
   color?: number | Color
+  /**
+   * Прозрачность материала (0.0 - полностью прозрачный, 1.0 - полностью непрозрачный).
+   * @default 1.0
+   */
+  opacity?: number
 }
 
 /**
@@ -18,6 +23,8 @@ export interface LineBasicMaterialParameters extends MaterialParameters {
 export class LineBasicMaterial extends Material {
   /** @default new Color(0xffffff) */
   public color: Color
+  /** @default 1.0 */
+  public opacity: number
 
   /**
    * @param parameters - Параметры материала.
@@ -29,5 +36,6 @@ export class LineBasicMaterial extends Material {
     } else {
       this.color = new Color(parameters.color ?? 0xffffff)
     }
+    this.opacity = parameters.opacity ?? 1.0
   }
 }
