@@ -39,7 +39,13 @@ export class Color {
     if (r instanceof Color) {
       this.copy(r)
     } else if (typeof r === 'string') {
-      this.setHexString(r)
+      if (r.startsWith('rgba(')) {
+        this.setRGBAString(r)
+        // Альфа уже установлена из строки, не перезаписываем параметром 'a'
+        return
+      } else {
+        this.setHexString(r)
+      }
     } else if (g === undefined && b === undefined) {
       this.setHex(r ?? 0xffffff)
     } else {
@@ -137,6 +143,38 @@ export class Color {
     }
 
     return this.setHex(hex)
+  }
+
+  /**
+   * Устанавливает цвет из строки формата rgba().
+   * @param rgbaString - Строка формата "rgba(r, g, b, a)".
+   * @returns Возвращает этот экземпляр для чейнинга.
+   */
+  public setRGBAString(rgbaString: string): this {
+    // Удаляем "rgba(" и ")" и разделяем по запятым
+    const matches = rgbaString.match(/rgba\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)/)
+    
+    if (!matches) {
+      console.warn(`Invalid rgba string: ${rgbaString}, falling back to white`)
+      this.setHex(0xffffff)
+      this.a = 1.0
+      return this
+    }
+
+    const r = parseFloat(matches[1])
+    const g = parseFloat(matches[2])
+    const b = parseFloat(matches[3])
+    const a = parseFloat(matches[4])
+
+    // Нормализуем значения RGB, если они больше 1
+    const normalize = (value: number) => value > 1 ? value / 255 : value
+    
+    this.r = normalize(r)
+    this.g = normalize(g)
+    this.b = normalize(b)
+    this.a = a
+    
+    return this
   }
 
   /**

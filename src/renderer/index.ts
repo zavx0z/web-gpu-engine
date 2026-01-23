@@ -743,7 +743,7 @@ export class Renderer {
       glowIntensity = (material as LineGlowMaterial).glowIntensity
       const glowColorObj = (material as LineGlowMaterial).glowColor
       if (glowColorObj) {
-        glowColor = new Float32Array([...glowColorObj.toArray(), 1.0])
+        glowColor = new Float32Array(glowColorObj.toArray())
       }
     }
     

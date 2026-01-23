@@ -12,13 +12,9 @@ import {
   TrueTypeFont,
   TextMaterial,
   AnimationMixer,
-  PlaneGeometry,
   SphereGeometry,
   TorusGeometry,
-  MeshLambertMaterial,
-  Mesh,
   LineSegments,
-  LineBasicMaterial,
   LineGlowMaterial,
   BufferGeometry,
   BufferAttribute,
@@ -96,15 +92,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Критическая ошибка при создании текста:", e)
   }
 
-  // --- Добавление новых геометрий ---
-  const plane = new Mesh(
-    new PlaneGeometry({ width: 2, height: 2 }),
-    new MeshLambertMaterial({ color: new Color(33, 31, 50) }),
-  )
-  plane.position.set(0, 0, 0)
-  plane.updateMatrix()
-  scene.add(plane)
-
   // Функция для создания геометрии линий из mesh-геометрии
   function createWireframeGeometry(geometry: BufferGeometry): BufferGeometry {
     const indices = geometry.index!.array
@@ -139,9 +126,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const sphere = new LineSegments(
     createWireframeGeometry(sphereGeometry),
     new LineGlowMaterial({
-      color: new Color(252, 70, 70, 0.4),
-      glowIntensity: 7.0,
-      glowColor: new Color("#ffffff"),
+      color: new Color("rgba(252, 70, 70, 0.52)"),
+      glowIntensity: 4.0,
+      glowColor: new Color("rgba(255, 255, 255, 1)"),
     }),
   )
   sphere.position.set(-0.2, 0, 1)
@@ -153,10 +140,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const torus = new LineSegments(
     createWireframeGeometry(torusGeometry),
-    new LineGlowMaterial({ 
-      color: new Color(109, 125, 244, 0.4),
-      glowIntensity: 7.0,
-      glowColor: new Color("#ffffff", 1.0) // Белый с полной непрозрачностью
+    new LineGlowMaterial({
+      color: new Color("rgba(104, 109, 251, 0.44)"),
+      glowIntensity: 1,
+      glowColor: new Color("rgba(255, 255, 255, 0.1)"),
     }),
   )
   torus.position.set(0, 0, 1)
