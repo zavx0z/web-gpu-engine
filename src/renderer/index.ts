@@ -29,13 +29,13 @@ const MAX_RENDERABLES = 1000
 const MAX_LIGHTS = 4 // Максимальное количество источников света
 
 // Размер данных для одного объекта: mat4x4 (64) + mat4x4 (64) + vec4 (16) + u32 (4) + 3*padding(12) = 160. Выравниваем до 256.
-const PER_OBJECT_UNIFORM_SIZE = Math.ceil((64 + 64 + 16 + 4) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT;
-const MAX_BONES = 128;
-const BONE_MATRICES_SIZE = MAX_BONES * 16 * 4; // 128 * mat4x4<f32>
-const PER_OBJECT_DATA_SIZE = PER_OBJECT_UNIFORM_SIZE + BONE_MATRICES_SIZE;
+const PER_OBJECT_UNIFORM_SIZE = Math.ceil((64 + 64 + 16 + 4) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT
+const MAX_BONES = 128
+const BONE_MATRICES_SIZE = MAX_BONES * 16 * 4 // 128 * mat4x4<f32>
+const PER_OBJECT_DATA_SIZE = PER_OBJECT_UNIFORM_SIZE + BONE_MATRICES_SIZE
 
-    // --- Размеры и смещения для данных сцены ---
-    const SCENE_UNIFORMS_SIZE = 272 + 16 // + vec3<f32> cameraPosition + f32 padding
+// --- Размеры и смещения для данных сцены ---
+const SCENE_UNIFORMS_SIZE = 272 + 16 // + vec3<f32> cameraPosition + f32 padding
 const LIGHT_STRUCT_SIZE = 32
 
 // --- Вспомогательные интерфейсы ---
@@ -47,6 +47,7 @@ const LIGHT_STRUCT_SIZE = 32
   skinIndexBuffer?: GPUBuffer
   skinWeightBuffer?: GPUBuffer
   instanceMatrixBuffer?: GPUBuffer // для инстансированных мешей
+  instanceBuffer?: GPUBuffer // для WireframeInstancedMesh (матрица + параметры материала)
 }
 
 /**
@@ -79,7 +80,7 @@ export class Renderer {
   private perObjectBindGroup: GPUBindGroup | null = null
   private perObjectDataCPU: Float32Array | null = null
 
-  private geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
+  geometryCache: Map<BufferGeometry, GeometryBuffers> = new Map()
   private depthTexture: GPUTexture | null = null
   private multisampleTexture: GPUTexture | null = null
   private sampleCount = 4 // MSAA
@@ -320,21 +321,23 @@ export class Renderer {
       fragment: {
         module: lineShaderModule,
         entryPoint: "fs_main",
-        targets: [{
-          format: this.presentationFormat,
-          blend: {
-            color: {
-              srcFactor: "src-alpha",
-              dstFactor: "one-minus-src-alpha",
-              operation: "add"
+        targets: [
+          {
+            format: this.presentationFormat,
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
             },
-            alpha: {
-              srcFactor: "one",
-              dstFactor: "one-minus-src-alpha",
-              operation: "add"
-            }
-          }
-        }],
+          },
+        ],
       },
       primitive: { topology: "line-list" },
       depthStencil: {
@@ -366,10 +369,6 @@ struct SceneUniforms {
 
 struct PerObjectUniforms {
   modelMatrix: mat4x4<f32>,
-  color: vec4<f32>,
-  glowIntensity: f32,
-  _padding: vec3<f32>, // для выравнивания после glowIntensity
-  glowColor: vec4<f32>
 };
 @binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
 
@@ -377,6 +376,9 @@ struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) worldPosition: vec3<f32>,
   @location(1) vertexColor: vec4<f32>,
+  @location(2) instanceColor: vec4<f32>,
+  @location(3) glowIntensity: f32,
+  @location(4) glowColor: vec4<f32>,
 };
 
 @vertex
@@ -386,7 +388,10 @@ fn vs_main(
     @location(2) instanceMatrix0: vec4<f32>,
     @location(3) instanceMatrix1: vec4<f32>,
     @location(4) instanceMatrix2: vec4<f32>,
-    @location(5) instanceMatrix3: vec4<f32>
+    @location(5) instanceMatrix3: vec4<f32>,
+    @location(6) instanceColor: vec4<f32>,
+    @location(7) glowIntensity: f32,
+    @location(8) glowColor: vec4<f32>
 ) -> VertexOutput {
   var out: VertexOutput;
   // Собираем матрицу инстанса из 4 векторов
@@ -401,7 +406,10 @@ fn vs_main(
   let worldPos = (worldMatrix * vec4<f32>(pos, 1.0)).xyz;
   out.position = globalUniforms.viewProjectionMatrix * vec4<f32>(worldPos, 1.0);
   out.worldPosition = worldPos;
-  out.vertexColor = color * perObject.color;
+  out.vertexColor = color;
+  out.instanceColor = instanceColor;
+  out.glowIntensity = glowIntensity;
+  out.glowColor = glowColor;
   return out;
 }
 
@@ -413,23 +421,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
   let baseFade = exp(-0.5 * distance);
 
   // Эффект свечения: затухание намного медленнее
-  let glowFade = exp(-0.5 * distance / perObject.glowIntensity);
+  let glowFade = exp(-0.5 * distance / in.glowIntensity);
 
   // Смешиваем базовое затухание и свечение в зависимости от интенсивности
-  let finalFade = mix(baseFade, glowFade, min(perObject.glowIntensity * 0.5, 1.0));
+  let finalFade = mix(baseFade, glowFade, min(in.glowIntensity * 0.5, 1.0));
 
-  // Используем цвет свечения если он задан, иначе цвет вершины
-  let glowColor = perObject.glowColor;
-  let useGlowColor = glowColor.a > 0.5; // Увеличиваем порог для надежности
-  let finalColor = select(in.vertexColor.rgb, glowColor.rgb, useGlowColor);
+    // Используем цвет инстанса
+    var finalColor = in.vertexColor.rgb * in.instanceColor.rgb;
+    
+    // Используем цвет свечения если он задан, иначе цвет инстанса
+    let useGlowColor = in.glowColor.a > 0.5;
+    finalColor = select(finalColor, in.glowColor.rgb, useGlowColor);
 
-  return vec4<f32>(finalColor * finalFade, in.vertexColor.a * finalFade);
+    return vec4<f32>(finalColor * finalFade, in.instanceColor.a * finalFade);
 }
-    `;
+    `
 
     const lineInstancedShaderModule = this.device.createShaderModule({
       code: lineInstancedWGSL,
-    });
+    })
 
     this.instancedLinePipeline = await this.device.createRenderPipelineAsync({
       layout: pipelineLayout,
@@ -439,17 +449,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         buffers: [
           // position
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
-          // color
+          // color (базовый цвет вершин)
           { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
-          // instance matrix (4 vec4)
+          // instance buffer (матрица 16 floats + параметры материала 9 floats = 25 floats = 100 байт)
           {
-            arrayStride: 64,
+            arrayStride: 100, // 25 * 4 байта
             stepMode: "instance",
             attributes: [
+              // Матрица инстанса (16 floats)
               { shaderLocation: 2, offset: 0, format: "float32x4" },
               { shaderLocation: 3, offset: 16, format: "float32x4" },
               { shaderLocation: 4, offset: 32, format: "float32x4" },
               { shaderLocation: 5, offset: 48, format: "float32x4" },
+              // Параметры материала (9 floats)
+              { shaderLocation: 6, offset: 64, format: "float32x4" }, // color (rgba)
+              { shaderLocation: 7, offset: 80, format: "float32" }, // glowIntensity
+              { shaderLocation: 8, offset: 84, format: "float32x4" }, // glowColor (rgba)
             ],
           },
         ],
@@ -457,21 +472,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       fragment: {
         module: lineInstancedShaderModule,
         entryPoint: "fs_main",
-        targets: [{
-          format: this.presentationFormat,
-          blend: {
-            color: {
-              srcFactor: "src-alpha",
-              dstFactor: "one-minus-src-alpha",
-              operation: "add"
+        targets: [
+          {
+            format: this.presentationFormat,
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
             },
-            alpha: {
-              srcFactor: "one",
-              dstFactor: "one-minus-src-alpha",
-              operation: "add"
-            }
-          }
-        }],
+          },
+        ],
       },
       primitive: { topology: "line-list" },
       depthStencil: {
@@ -602,7 +619,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       "instanced-mesh": 1,
       "skinned-mesh": 2,
       "instanced-line": 3,
-      "line": 4,
+      line: 4,
       "text-stencil": 5,
       "text-cover": 6,
     }
@@ -615,7 +632,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // --- Pass 1: Update CPU Data ---
     for (const { item, originalIndex } of indexedRenderList) {
-        switch (item.type) {
+      switch (item.type) {
         case "static-mesh":
         case "skinned-mesh":
           this.renderMesh(null, item.object as Mesh, item.worldMatrix, originalIndex)
@@ -716,6 +733,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     this.device.queue.submit([commandEncoder.finish()])
   }
 
+  /**
+   * Очищает кэш геометрии для указанного объекта BufferGeometry.
+   * Это заставляет рендерер пересоздать GPU буферы при следующем рендеринге.
+   * @param geometry - Геометрия для очистки из кэша
+   */
+  public invalidateGeometry(geometry: BufferGeometry): void {
+    this.geometryCache.delete(geometry)
+  }
+
   private updateSceneUniforms(lights: LightItem[], viewMatrix: Matrix4): void {
     if (!this.device || !this.sceneUniformBuffer) return
 
@@ -737,9 +763,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const ty = te[13]
     const tz = te[14]
     const cameraPosition = new Vector3(
-      - (te[0] * tx + te[1] * ty + te[2] * tz),
-      - (te[4] * tx + te[5] * ty + te[6] * tz),
-      - (te[8] * tx + te[9] * ty + te[10] * tz)
+      -(te[0] * tx + te[1] * ty + te[2] * tz),
+      -(te[4] * tx + te[5] * ty + te[6] * tz),
+      -(te[8] * tx + te[9] * ty + te[10] * tz),
     )
     // Записываем cameraPosition после lights (36 + 4*32 = 164)
     // 36 + 4*32 = 164 байта, что соответствует 41 элементу float32 (164/4 = 41)
@@ -752,7 +778,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       const worldLightPos = new Vector3(
         lightItem.worldMatrix.elements[12],
         lightItem.worldMatrix.elements[13],
-        lightItem.worldMatrix.elements[14]
+        lightItem.worldMatrix.elements[14],
       )
       const viewLightPos = worldLightPos.applyMatrix4(viewMatrix)
 
@@ -789,39 +815,51 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       normalBuffer.unmap()
     }
 
-    let skinIndexBuffer: GPUBuffer | undefined;
+    let skinIndexBuffer: GPUBuffer | undefined
     if (geometry.attributes.skinIndex && geometry.attributes.skinIndex.array.length > 0) {
       skinIndexBuffer = this.device.createBuffer({
         size: (geometry.attributes.skinIndex.array.byteLength + 3) & ~3,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
         mappedAtCreation: true,
-      });
-      const SourceTypedArray = geometry.attributes.skinIndex.array.constructor as any;
-      new SourceTypedArray(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array as any);
-      skinIndexBuffer.unmap();
+      })
+      const SourceTypedArray = geometry.attributes.skinIndex.array.constructor as any
+      new SourceTypedArray(skinIndexBuffer.getMappedRange()).set(geometry.attributes.skinIndex.array as any)
+      skinIndexBuffer.unmap()
     }
 
-    let skinWeightBuffer: GPUBuffer | undefined;
+    let skinWeightBuffer: GPUBuffer | undefined
     if (geometry.attributes.skinWeight && geometry.attributes.skinWeight.array.length > 0) {
       skinWeightBuffer = this.device.createBuffer({
         size: (geometry.attributes.skinWeight.array.byteLength + 3) & ~3,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
         mappedAtCreation: true,
-      });
-      new Float32Array(skinWeightBuffer.getMappedRange()).set(geometry.attributes.skinWeight.array);
-      skinWeightBuffer.unmap();
+      })
+      new Float32Array(skinWeightBuffer.getMappedRange()).set(geometry.attributes.skinWeight.array)
+      skinWeightBuffer.unmap()
     }
 
-    // Для InstancedMesh создаем буфер для матриц инстансов
-    let instanceMatrixBuffer: GPUBuffer | undefined;
+    // Для WireframeInstancedMesh создаем буфер для данных инстансов (матрица + параметры материала)
+    let instanceBuffer: GPUBuffer | undefined
+    if (geometry.attributes.instanceBuffer && geometry.attributes.instanceBuffer.array.length > 0) {
+      instanceBuffer = this.device.createBuffer({
+        size: (geometry.attributes.instanceBuffer.array.byteLength + 3) & ~3,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      })
+      new Float32Array(instanceBuffer.getMappedRange()).set(geometry.attributes.instanceBuffer.array)
+      instanceBuffer.unmap()
+    }
+
+    // Для обратной совместимости: если есть старый атрибут instanceMatrix, создаем из него instanceBuffer
+    let instanceMatrixBuffer: GPUBuffer | undefined
     if (geometry.attributes.instanceMatrix && geometry.attributes.instanceMatrix.array.length > 0) {
       instanceMatrixBuffer = this.device.createBuffer({
         size: (geometry.attributes.instanceMatrix.array.byteLength + 3) & ~3,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
         mappedAtCreation: true,
-      });
-      new Float32Array(instanceMatrixBuffer.getMappedRange()).set(geometry.attributes.instanceMatrix.array);
-      instanceMatrixBuffer.unmap();
+      })
+      new Float32Array(instanceMatrixBuffer.getMappedRange()).set(geometry.attributes.instanceMatrix.array)
+      instanceMatrixBuffer.unmap()
     }
 
     let colorBuffer: GPUBuffer | undefined
@@ -869,13 +907,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       skinIndexBuffer,
       skinWeightBuffer,
       instanceMatrixBuffer,
+      instanceBuffer,
     }
 
     this.geometryCache.set(geometry, buffers)
     return buffers
   }
 
-  private renderMesh(passEncoder: GPURenderPassEncoder | null, mesh: Mesh | SkinnedMesh, worldMatrix: Matrix4, renderIndex: number): void {
+  private renderMesh(
+    passEncoder: GPURenderPassEncoder | null,
+    mesh: Mesh | SkinnedMesh,
+    worldMatrix: Matrix4,
+    renderIndex: number,
+  ): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
     if (!material.visible) return
@@ -892,27 +936,28 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 32)
     }
 
-    const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0;
+    const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0
 
-    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE
 
     if (isSkinned) {
-      const skeleton = (mesh as SkinnedMesh).skeleton;
-      this.perObjectDataCPU.set(skeleton.boneMatrices, boneMatricesOffset / 4);
+      const skeleton = (mesh as SkinnedMesh).skeleton
+      this.perObjectDataCPU.set(skeleton.boneMatrices, boneMatricesOffset / 4)
     }
 
     if (passEncoder) {
-      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
 
-      const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
+      const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } =
+        this.getOrCreateGeometryBuffers(mesh.geometry)
 
       passEncoder.setVertexBuffer(0, positionBuffer)
       if (normalBuffer) {
         passEncoder.setVertexBuffer(1, normalBuffer)
       }
       if (isSkinned && skinIndexBuffer && skinWeightBuffer) {
-        passEncoder.setVertexBuffer(2, skinIndexBuffer);
-        passEncoder.setVertexBuffer(3, skinWeightBuffer);
+        passEncoder.setVertexBuffer(2, skinIndexBuffer)
+        passEncoder.setVertexBuffer(3, skinWeightBuffer)
       }
 
       if (indexBuffer) {
@@ -929,7 +974,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     passEncoder: GPURenderPassEncoder | null,
     mesh: InstancedMesh,
     worldMatrix: Matrix4,
-    renderIndex: number
+    renderIndex: number,
   ): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
@@ -948,16 +993,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     if (passEncoder) {
-      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
-      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset]);
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE
+      passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
 
-      const { positionBuffer, normalBuffer, indexBuffer, instanceMatrixBuffer } = this.getOrCreateGeometryBuffers(mesh.geometry)
+      const { positionBuffer, normalBuffer, indexBuffer, instanceMatrixBuffer } = this.getOrCreateGeometryBuffers(
+        mesh.geometry,
+      )
 
       passEncoder.setVertexBuffer(0, positionBuffer)
       if (normalBuffer) {
         passEncoder.setVertexBuffer(1, normalBuffer)
       }
-      
+
       // Устанавливаем буфер матриц инстансов
       if (instanceMatrixBuffer) {
         passEncoder.setVertexBuffer(2, instanceMatrixBuffer)
@@ -977,29 +1024,29 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     passEncoder: GPURenderPassEncoder | null,
     lines: LineSegments,
     worldMatrix: Matrix4,
-    renderIndex: number
+    renderIndex: number,
   ): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
-    
+
     const material = lines.material
     const isLineBasic = material instanceof LineBasicMaterial
     const isLineGlow = material instanceof LineGlowMaterial
-    
+
     if (!(isLineBasic || isLineGlow) || !material.visible) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
     const offsetFloats = dynamicOffset / 4
-    
+
     // Записываем матрицу модели (16 floats)
     this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
-    
+
     // Записываем цвет материала с opacity (4 floats)
     this.perObjectDataCPU.set([...material.color.toArray(), material.opacity], offsetFloats + 16)
-    
+
     // Записываем параметры свечения
     let glowIntensity = 1.0
     let glowColor = new Float32Array([0, 0, 0, 0])
-    
+
     if (isLineGlow) {
       glowIntensity = (material as LineGlowMaterial).glowIntensity
       const glowColorObj = (material as LineGlowMaterial).glowColor
@@ -1007,15 +1054,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         glowColor = new Float32Array(glowColorObj.toArray())
       }
     }
-    
+
     // glowIntensity (1 float) и padding (3 floats)
     this.perObjectDataCPU.set([glowIntensity, 0, 0, 0], offsetFloats + 20)
-    
+
     // glowColor (4 floats)
     this.perObjectDataCPU.set(glowColor, offsetFloats + 24)
 
     if (passEncoder) {
-      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
       const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
@@ -1029,46 +1076,34 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     passEncoder: GPURenderPassEncoder | null,
     lines: WireframeInstancedMesh,
     worldMatrix: Matrix4,
-    renderIndex: number
+    renderIndex: number,
   ): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
-    
-    const material = lines.material
-    const isLineGlow = material instanceof LineGlowMaterial
-    
-    if (!isLineGlow || !material.visible) return
+
+    // Проверяем видимость
+    if (!lines.visible) return
 
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
     const offsetFloats = dynamicOffset / 4
-    
-    // Записываем матрицу модели (16 floats)
-    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
-    
-    // Записываем цвет материала с opacity (4 floats)
-    this.perObjectDataCPU.set([...material.color.toArray(), material.opacity], offsetFloats + 16)
-    
-    // Записываем параметры свечения
-    let glowIntensity = material.glowIntensity
-    let glowColor = new Float32Array([0, 0, 0, 0])
-    if (material.glowColor) {
-      glowColor = new Float32Array(material.glowColor.toArray())
-    }
 
-    // glowIntensity (1 float) и padding (3 floats)
-    this.perObjectDataCPU.set([glowIntensity, 0, 0, 0], offsetFloats + 20)
-    
-    // glowColor (4 floats)
-    this.perObjectDataCPU.set(glowColor, offsetFloats + 24)
+    // Записываем только матрицу модели (16 floats)
+    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
+
+    // Остальные параметры материала теперь передаются через атрибуты инстансов
+    // Заполняем остальные поля нулями для выравнивания
+    this.perObjectDataCPU.set([0, 0, 0, 0], offsetFloats + 16) // color
+    this.perObjectDataCPU.set([0, 0, 0, 0], offsetFloats + 20) // glowIntensity + padding
+    this.perObjectDataCPU.set([0, 0, 0, 0], offsetFloats + 24) // glowColor
 
     if (passEncoder) {
-      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
-      const { positionBuffer, colorBuffer, instanceMatrixBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
+      const { positionBuffer, colorBuffer, instanceBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
       passEncoder.setVertexBuffer(0, positionBuffer)
       passEncoder.setVertexBuffer(1, colorBuffer || positionBuffer)
-      if (instanceMatrixBuffer) {
-        passEncoder.setVertexBuffer(2, instanceMatrixBuffer)
+      if (instanceBuffer) {
+        passEncoder.setVertexBuffer(2, instanceBuffer)
       }
       passEncoder.draw(lines.geometry.attributes.position.count, lines.count)
     }
@@ -1079,7 +1114,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     text: Text,
     worldMatrix: Matrix4,
     renderIndex: number,
-    isStencil: boolean
+    isStencil: boolean,
   ): void {
     if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
     const geometry = isStencil ? text.stencilGeometry : text.coverGeometry
@@ -1093,7 +1128,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     if (passEncoder) {
-      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+      const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
       const { positionBuffer, indexBuffer } = this.getOrCreateGeometryBuffers(geometry)
 

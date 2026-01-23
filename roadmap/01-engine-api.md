@@ -30,7 +30,7 @@
 4. ✅ **Effects Material**
    - `GlowMaterial.ts`: Класс материала с параметрами `color` и `intensity`. (Пока можно использовать заглушку, наследующуюся от Material, с базовым цветом, шейдер добавим позже).
 
-5. **Instancing Support**
+5. ✅  **Instancing Support**
    - `InstancedMesh.ts`: Класс, наследуемый от `Mesh`, принимающий `geometry`, `material` и `count`. Должен управлять буфером матриц экземпляров (`instanceMatrix`).
    - `mesh_instanced.wgsl`: Шейдер, поддерживающий чтение атрибутов экземпляра (матрица трансформации) и их применение к вершинам.
    - Обновить `Renderer.ts` для поддержки отрисовки `InstancedMesh`.

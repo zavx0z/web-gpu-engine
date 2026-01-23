@@ -144,17 +144,26 @@ document.addEventListener("DOMContentLoaded", async () => {
   torus.updateMatrix()
   scene.add(torus)
 
-  // Два инстанса сфер внутри тора
+  // Два инстанса сфер внутри тора с возможностью индивидуальной настройки материалов
   const instanceCount = 2
+  
+  // Создаем инстансы с базовым материалом
   const spheresInsideTorus = new WireframeInstancedMesh(
     sphereWireframe,
     new LineGlowMaterial({
-      color: new Color("rgba(252, 70, 70, 0.69)"),
-      glowIntensity: 1.4,
-      glowColor: new Color("rgba(255, 255, 255, 1)"),
+      color: new Color("rgba(252, 70, 70, 0.8)"),
+      glowIntensity: 1,
+      glowColor: new Color("rgba(252, 70, 70, 0.8)"),
     }),
-    instanceCount,
+    instanceCount
   )
+
+  // Индивидуально меняем материал для второго инстанса
+  spheresInsideTorus.setMaterialAt(1, new LineGlowMaterial({
+    color: new Color("rgba(70, 252, 70, 0.8)"),
+    glowIntensity: 1.5,
+    glowColor: new Color("rgba(70, 252, 70, 0.8)"),
+  }))
 
   // Располагаем инстансы внутри тора (по бокам)
   const tempMatrix = new Matrix4()
@@ -266,14 +275,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       spheresInsideTorus.setMatrixAt(i, tempMatrix)
     }
 
-    // Важно: очищаем кэш геометрии в рендерере, чтобы он пересоздал буферы с новыми матрицами
+    // Обновляем буфер инстансов с новыми матрицами
+    spheresInsideTorus.update()
+    
+    // Очищаем кэш геометрии в рендерере, чтобы он пересоздал буферы с новыми данными
     // Это заставит рендерер создать новые буферы GPU с обновленными данными
     renderer.geometryCache.delete(spheresInsideTorus.geometry)
-
-    // Обновляем геометрию с новыми матрицами инстансов
-    spheresInsideTorus.geometry.setAttribute('instanceMatrix', 
-      new BufferAttribute(spheresInsideTorus.instanceMatrix, 16)
-    )
 
     // Обновление матриц
     torus.updateMatrix()
