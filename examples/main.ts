@@ -125,34 +125,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Создаем геометрию сферы один раз для переиспользования
-  const sphereGeometry = new SphereGeometry({ radius: 0.04 })
+  const sphereGeometry = new SphereGeometry({ radius: 0.14 })
   const sphereWireframe = createWireframeGeometry(sphereGeometry)
-
-  // Первая сфера (красная) слева от тора
-  const sphere1 = new LineSegments(
-    sphereWireframe,
-    new LineGlowMaterial({
-      color: new Color("rgba(252, 70, 70, 0.52)"),
-      glowIntensity: 1.4,
-      glowColor: new Color("rgba(255, 255, 255, 1)"),
-    }),
-  )
-  sphere1.position.set(-0.2, 0, 1)
-  sphere1.updateMatrix()
-  scene.add(sphere1)
-
-  // Вторая сфера (зеленая) справа от тора
-  const sphere2 = new LineSegments(
-    sphereWireframe,
-    new LineGlowMaterial({
-      color: new Color("rgba(70, 252, 70, 0.52)"),
-      glowIntensity: 1.4,
-      glowColor: new Color("rgba(255, 255, 255, 1)"),
-    }),
-  )
-  sphere2.position.set(0.2, 0, 1)
-  sphere2.updateMatrix()
-  scene.add(sphere2)
 
   // Тор как wireframe со светящимся материалом
   const torusGeometry = new TorusGeometry({ radius: 0.2, tube: 0.14 })
@@ -170,64 +144,47 @@ document.addEventListener("DOMContentLoaded", async () => {
   torus.updateMatrix()
   scene.add(torus)
 
-  // Демонстрация Instancing: создаем инстансированный меш с 50 сферами
-  const instanceCount = 50
-  const instancedSpheres = new WireframeInstancedMesh(
+  // Два инстанса сфер внутри тора
+  const instanceCount = 2
+  const spheresInsideTorus = new WireframeInstancedMesh(
     sphereWireframe,
     new LineGlowMaterial({
-      color: new Color("rgba(252, 119, 70, 0.52)"),
+      color: new Color("rgba(252, 70, 70, 0.69)"),
       glowIntensity: 1.4,
       glowColor: new Color("rgba(255, 255, 255, 1)"),
     }),
     instanceCount,
   )
 
-  // Располагаем инстансы по кругу
+  // Располагаем инстансы внутри тора (по бокам)
   const tempMatrix = new Matrix4()
   const tempVector = new Vector3()
-  for (let i = 0; i < instanceCount; i++) {
-    const angle = (i / instanceCount) * Math.PI * 2
-    const radius = 1.0
-    const x = Math.cos(angle) * radius
-    const y = Math.sin(angle) * radius
-    const z = 1.0
 
-    tempMatrix.identity()
-    tempMatrix.makeTranslation(x, y, z)
+  // Первый инстанс слева (относительно тора)
+  tempMatrix.identity()
+  tempMatrix.makeTranslation(-0.1, 0, 0) // Z=0, так как теперь относительно тора
+  tempVector.set(0.5, 0.5, 0.5)
+  tempMatrix.scale(tempVector)
+  spheresInsideTorus.setMatrixAt(0, tempMatrix)
 
-    // Можно также добавить случайное масштабирование и вращение
-    const scale = 0.5 + Math.random() * 0.5
-    tempVector.set(scale, scale, scale)
-    tempMatrix.scale(tempVector)
+  // Второй инстанс справа (относительно тора)
+  tempMatrix.identity()
+  tempMatrix.makeTranslation(0.1, 0, 0) // Z=0, так как теперь относительно тора
+  tempVector.set(0.5, 0.5, 0.5)
+  tempMatrix.scale(tempVector)
+  spheresInsideTorus.setMatrixAt(1, tempMatrix)
 
-    instancedSpheres.setMatrixAt(i, tempMatrix)
-  }
+  spheresInsideTorus.position.set(0, 0, 0)
+  spheresInsideTorus.updateMatrix()
+  torus.add(spheresInsideTorus)
 
-  instancedSpheres.position.set(0, 0, 0)
-  instancedSpheres.updateMatrix()
-  scene.add(instancedSpheres)
+
 
   // Переменные для wiggli эффекта (только дрожание)
   let time = 0
-  const sphere1OriginalPos = new Vector3(-0.2, 0, 1)
-  const sphere2OriginalPos = new Vector3(0.2, 0, 1)
   const torusOriginalPos = new Vector3(0, 0, 1)
 
   // Параметры для wiggli эффекта - только небольшие колебания
-  const sphere1WiggliParams = {
-    amplitude: 0.015, // Маленькая амплитуда для легкого дрожания
-    speedX: 3.5, // Разные скорости для естественного вида
-    speedY: 4.2,
-    speedZ: 2.8,
-  }
-
-  const sphere2WiggliParams = {
-    amplitude: 0.018, // Чуть больше амплитуда для второй сферы
-    speedX: 4.1,
-    speedY: 3.7,
-    speedZ: 2.4,
-  }
-
   const torusWiggliParams = {
     amplitude: 0.02, // Чуть больше амплитуда для тора
     speedX: 2.8,
@@ -236,8 +193,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Случайные фазы для более естественного дрожания
-  let sphere1Phase = Math.random() * Math.PI * 2
-  let sphere2Phase = Math.random() * Math.PI * 2
   let torusPhase = Math.random() * Math.PI * 2
 
   let lastTime = performance.now()
@@ -252,32 +207,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (mixer) mixer.update(delta)
 
-    // Wiggli эффект для первой сферы - только дрожание позиции
-    const sphere1OffsetX = Math.sin(time * sphere1WiggliParams.speedX + sphere1Phase) * sphere1WiggliParams.amplitude
-    const sphere1OffsetY =
-      Math.cos(time * sphere1WiggliParams.speedY + sphere1Phase * 1.3) * sphere1WiggliParams.amplitude
-    const sphere1OffsetZ =
-      Math.sin(time * sphere1WiggliParams.speedZ + sphere1Phase * 0.7) * sphere1WiggliParams.amplitude * 0.7
-
-    sphere1.position.set(
-      sphere1OriginalPos.x + sphere1OffsetX,
-      sphere1OriginalPos.y + sphere1OffsetY,
-      sphere1OriginalPos.z + sphere1OffsetZ,
-    )
-
-    // Wiggli эффект для второй сферы - только дрожание позиции
-    const sphere2OffsetX = Math.sin(time * sphere2WiggliParams.speedX + sphere2Phase) * sphere2WiggliParams.amplitude
-    const sphere2OffsetY =
-      Math.cos(time * sphere2WiggliParams.speedY + sphere2Phase * 1.5) * sphere2WiggliParams.amplitude
-    const sphere2OffsetZ =
-      Math.sin(time * sphere2WiggliParams.speedZ + sphere2Phase * 0.9) * sphere2WiggliParams.amplitude * 0.6
-
-    sphere2.position.set(
-      sphere2OriginalPos.x + sphere2OffsetX,
-      sphere2OriginalPos.y + sphere2OffsetY,
-      sphere2OriginalPos.z + sphere2OffsetZ,
-    )
-
     // Wiggli эффект для тора - только дрожание позиции
     const torusOffsetX = Math.sin(time * torusWiggliParams.speedX + torusPhase) * torusWiggliParams.amplitude
     const torusOffsetY = Math.cos(time * torusWiggliParams.speedY + torusPhase * 1.1) * torusWiggliParams.amplitude
@@ -291,8 +220,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     )
 
     // Обновление матриц
-    sphere1.updateMatrix()
-    sphere2.updateMatrix()
     torus.updateMatrix()
     scene.updateWorldMatrix()
 
