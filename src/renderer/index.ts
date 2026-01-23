@@ -266,7 +266,6 @@ export class Renderer {
         entryPoint: "vs_main",
         buffers: [
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
-          { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
         ],
       },
       fragment: {
@@ -676,13 +675,16 @@ export class Renderer {
     const offsetFloats = dynamicOffset / 4
     this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats)
 
+    // Записываем цвет материала
+    const material = lines.material
+    this.perObjectDataCPU.set(material.color.toArray(), offsetFloats + 16) // после матрицы (16 floats)
+
     if (passEncoder) {
       const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
-      const { positionBuffer, colorBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
+      const { positionBuffer } = this.getOrCreateGeometryBuffers(lines.geometry)
 
       passEncoder.setVertexBuffer(0, positionBuffer)
-      if (colorBuffer) passEncoder.setVertexBuffer(1, colorBuffer)
       passEncoder.draw(lines.geometry.attributes.position.count)
     }
   }
