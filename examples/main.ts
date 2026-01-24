@@ -19,28 +19,45 @@ import {
   BufferGeometry,
   BufferAttribute,
   WireframeInstancedMesh,
-  MeshLambertMaterial,
   Raycaster,
+  Object3D,
 } from "../src"
 import { Matrix4 } from "../src/math/Matrix4"
 import { Vector3 } from "../src/math/Vector3"
+import YogaService from "../src/layout/YogaService"
+import { LayoutManager } from "../src/layout/LayoutManager"
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const renderer = new Renderer()
+  console.log("🚀 Application Starting...")
 
+  try {
+    console.log("📦 Initializing Yoga Layout...")
+    await YogaService.instance.initialize()
+    console.log("✅ Yoga Layout Initialized")
+  } catch (e) {
+    console.error("❌ CRITICAL: Yoga failed to load", e)
+    return
+  }
+
+  console.log("🔧 Initializing Renderer...")
+  const renderer = new Renderer()
   const canvas: HTMLCanvasElement = document.body.querySelector("#metafor")!
   await renderer.init(canvas)
+  console.log("✅ Renderer Initialized")
 
   if (!renderer.canvas) {
     console.error("Не удалось инициализировать WebGPU")
     return
   }
+
   renderer.setPixelRatio(window.devicePixelRatio)
   renderer.setSize(window.innerWidth, window.innerHeight)
+
   window.addEventListener("resize", () => {
     renderer.setSize(window.innerWidth, window.innerHeight)
     viewPoint.setAspectRatio(window.innerWidth / window.innerHeight)
   })
+
   document.body.appendChild(renderer.canvas)
 
   const scene = new Scene()
@@ -61,7 +78,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // --- Raycaster Setup ---
   const raycaster = new Raycaster()
   const mouse = { x: 0, y: 0 }
-  
+
   // Отслеживаем положение мыши в нормализованных координатах устройства (NDC)
   window.addEventListener("mousemove", (event) => {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1
@@ -73,9 +90,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   light.updateMatrix()
   scene.add(light)
 
+  // --- Layout Example ---
+  const layoutManager = new LayoutManager()
+  const uiContainer = new Object3D()
+  uiContainer.layout = {
+    width: 600,
+    height: 200,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  }
+  uiContainer.position.set(-3, 0, 2)
+  uiContainer.rotation.x = Math.PI / 8
+  uiContainer.updateMatrix()
+  scene.add(uiContainer)
+
+  const textMaterial = new TextMaterial({ color: new Color(1.0, 1.0, 1.0) })
+  const fontLoaded = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf") // Reusing font loading logic slightly duplicated but explicit here
+
+  const text1 = new Text("Flex", fontLoaded, 0.4, textMaterial)
+  text1.layout = { margin: 10, width: 100, height: 40 }
+  uiContainer.add(text1)
+
+  const text2 = new Text("Yoga", fontLoaded, 0.4, textMaterial)
+  text2.layout = { margin: 10, width: 100, height: 40 }
+  uiContainer.add(text2)
+
+  const text3 = new Text("GPU", fontLoaded, 0.4, textMaterial)
+  text3.layout = { margin: 10, width: 100, height: 40 }
+  uiContainer.add(text3)
+
   // --- Загрузка GLTF модели ---
+  console.log("📥 Loading GLTF Model...")
   const loader = new GLTFLoader()
   const gltf = await loader.load("./models/bots.glb")
+  console.log("✅ GLTF Model Loaded")
+
   gltf.scene.position.set(0, 0, 0)
   gltf.scene.rotation.z = Math.PI
   gltf.scene.updateMatrix()
@@ -87,7 +137,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // The loader wraps content in a Z-up object (children[0]).
     // The actual GLTF root nodes (the bots) are children of this wrapper.
     const modelRoot = gltf.scene.children[0]
-
     gltf.animations.forEach((clip, index) => {
       // Bind Animation 0 -> Object 0, Animation 1 -> Object 1, etc.
       const localRoot = modelRoot && modelRoot.children[index] ? modelRoot.children[index] : gltf.scene
@@ -110,8 +159,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   function createWireframeGeometry(geometry: BufferGeometry): BufferGeometry {
     const indices = geometry.index!.array
     const positions = geometry.attributes.position.array
-
     const lines = []
+
     for (let i = 0; i < indices.length; i += 3) {
       const a = indices[i] * 3
       const b = indices[i + 1] * 3
@@ -120,11 +169,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Линия AB
       lines.push(positions[a], positions[a + 1], positions[a + 2])
       lines.push(positions[b], positions[b + 1], positions[b + 2])
-
       // Линия BC
       lines.push(positions[b], positions[b + 1], positions[b + 2])
       lines.push(positions[c], positions[c + 1], positions[c + 2])
-
       // Линия CA
       lines.push(positions[c], positions[c + 1], positions[c + 2])
       lines.push(positions[a], positions[a + 1], positions[a + 2])
@@ -157,7 +204,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Два инстанса сфер внутри тора с возможностью индивидуальной настройки материалов
   const instanceCount = 2
-  
+
   // Создаем инстансы с базовым материалом
   const spheresInsideTorus = new WireframeInstancedMesh(
     sphereWireframe,
@@ -166,15 +213,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       glowIntensity: 1,
       glowColor: new Color("rgba(252, 70, 70, 0.8)"),
     }),
-    instanceCount
+    instanceCount,
   )
 
   // Индивидуально меняем материал для второго инстанса
-  spheresInsideTorus.setMaterialAt(1, new LineGlowMaterial({
-    color: new Color("rgba(70, 252, 70, 0.8)"),
-    glowIntensity: 1.5,
-    glowColor: new Color("rgba(70, 252, 70, 0.8)"),
-  }))
+  spheresInsideTorus.setMaterialAt(
+    1,
+    new LineGlowMaterial({
+      color: new Color("rgba(70, 252, 70, 0.8)"),
+      glowIntensity: 1.5,
+      glowColor: new Color("rgba(70, 252, 70, 0.8)"),
+    }),
+  )
 
   // Располагаем инстансы внутри тора (по бокам)
   const tempMatrix = new Matrix4()
@@ -198,14 +248,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   spheresInsideTorus.updateMatrix()
   torus.add(spheresInsideTorus)
 
-
-
   // Переменные для wiggli эффекта (только дрожание)
   let time = 0
   const torusOriginalPos = new Vector3(0, 0, 1)
+
   const sphereRelativePositions = [
     new Vector3(-0.1, 0, 0), // Относительно тора
-    new Vector3(0.1, 0, 0)
+    new Vector3(0.1, 0, 0),
   ]
 
   // Параметры для wiggli эффекта - только небольшие колебания
@@ -218,31 +267,37 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Параметры для wiggli эффекта сфер
   const spheresWiggliParams = [
-    { // Первая сфера
+    {
+      // Первая сфера
       amplitude: 0.015,
       speedX: 3.5,
       speedY: 4.2,
       speedZ: 2.8,
     },
-    { // Вторая сфера
+    {
+      // Вторая сфера
       amplitude: 0.018,
       speedX: 4.1,
       speedY: 3.7,
       speedZ: 2.4,
-    }
+    },
   ]
 
   // Случайные фазы для более естественного дрожания
   let torusPhase = Math.random() * Math.PI * 2
-  let spherePhases = [
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2
-  ]
+  let spherePhases = [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2]
 
+  let frameCount = 0
+  console.log("🎬 Starting Animation Loop")
   let lastTime = performance.now()
 
   function animate() {
     requestAnimationFrame(animate)
+
+    frameCount++
+    if (frameCount % 100 === 0) console.log(`Stats: Frame ${frameCount}`)
+
+    layoutManager.update(uiContainer, 600, 200, 0.01)
 
     const currentTime = performance.now()
     const delta = (currentTime - lastTime) / 1000
@@ -251,17 +306,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // --- Raycasting Logic ---
     raycaster.setFromCamera(mouse, viewPoint)
-    
+
     // Сбрасываем цвета перед проверкой (логика "по умолчанию")
     // Инстанс 0: Красный
     spheresInsideTorus.setGlowColorAt(0, new Color("rgba(252, 70, 70, 0.8)"))
     spheresInsideTorus.setGlowIntensityAt(0, 1.0)
+
     // Инстанс 1: Зеленый
     spheresInsideTorus.setGlowColorAt(1, new Color("rgba(70, 252, 70, 0.8)"))
     spheresInsideTorus.setGlowIntensityAt(1, 1.5)
 
     const intersects = raycaster.intersectObject(spheresInsideTorus)
-    
     if (intersects.length > 0) {
       const hit = intersects[0]
       // Если попали в сферу, делаем её ярко-белой
@@ -288,29 +343,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Wiggli эффект для инстансированных сфер (относительно тора)
     const tempMatrix = new Matrix4()
     const tempVector = new Vector3()
-    
+
     for (let i = 0; i < 2; i++) {
-      const sphereOffsetX = Math.sin(time * spheresWiggliParams[i].speedX + spherePhases[i]) * spheresWiggliParams[i].amplitude
-      const sphereOffsetY = Math.cos(time * spheresWiggliParams[i].speedY + spherePhases[i] * 1.3) * spheresWiggliParams[i].amplitude
-      const sphereOffsetZ = Math.sin(time * spheresWiggliParams[i].speedZ + spherePhases[i] * 0.7) * spheresWiggliParams[i].amplitude * 0.7
-      
+      const sphereOffsetX =
+        Math.sin(time * spheresWiggliParams[i].speedX + spherePhases[i]) * spheresWiggliParams[i].amplitude
+      const sphereOffsetY =
+        Math.cos(time * spheresWiggliParams[i].speedY + spherePhases[i] * 1.3) * spheresWiggliParams[i].amplitude
+      const sphereOffsetZ =
+        Math.sin(time * spheresWiggliParams[i].speedZ + spherePhases[i] * 0.7) * spheresWiggliParams[i].amplitude * 0.7
+
       const newPos = new Vector3(
         sphereRelativePositions[i].x + sphereOffsetX,
         sphereRelativePositions[i].y + sphereOffsetY,
-        sphereRelativePositions[i].z + sphereOffsetZ
+        sphereRelativePositions[i].z + sphereOffsetZ,
       )
-      
+
       tempMatrix.identity()
       tempMatrix.makeTranslation(newPos.x, newPos.y, newPos.z)
       tempVector.set(0.5, 0.5, 0.5)
       tempMatrix.scale(tempVector)
-      
       spheresInsideTorus.setMatrixAt(i, tempMatrix)
     }
 
     // Обновляем буфер инстансов с новыми матрицами
     spheresInsideTorus.update()
-    
+
     // Обновление матриц
     torus.updateMatrix()
     spheresInsideTorus.updateMatrix()

@@ -2,6 +2,7 @@ import { Matrix4 } from "../math/Matrix4"
 import { Quaternion } from "../math/Quaternion"
 import { Vector3 } from "../math/Vector3"
 import { Raycaster, Intersection } from "./Raycaster"
+import type { LayoutProps } from '../layout/LayoutTypes';
 
 /**
  * Базовый класс для всех объектов в сцене.
@@ -16,6 +17,7 @@ export class Object3D {
   public name: string = ''
   public parent: Object3D | null = null
   public position: Vector3 = new Vector3()
+  public layout?: LayoutProps;
   public quaternion: Quaternion = new Quaternion()
 
   // Внутреннее свойство для хранения вращения в углах Эйлера.

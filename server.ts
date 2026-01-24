@@ -18,11 +18,8 @@ Bun.serve({
     "/models/engine.gltf": file("./static/engine.gltf"),
     "/models/engine.bin": file("./static/engine.bin"),
     "/models/engine.glb": file("./static/engine.glb"),
-    // "/gl-matrix.js": new Response(Bun.file("./gl-matrix.js"), {
-    //   headers: {
-    //     "Content-Type": "application/javascript",
-    //   },
-    // })
+    // Serve Yoga WASM at the root so the default loader can find it
+    "/yoga.wasm": file("./node_modules/yoga-layout/dist/yoga.wasm")
   },
 })
 
