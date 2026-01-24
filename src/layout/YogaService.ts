@@ -1,4 +1,4 @@
-import initYoga from 'yoga-layout';
+// import initYoga from 'yoga-layout'; // Converted to dynamic import
 
 export enum YogaLoadingState {
   PENDING,
@@ -54,7 +54,10 @@ export class YogaService {
         console.log(`YogaService: Downloaded WASM size: ${wasmBuffer.byteLength} bytes`);
 
         // Handle ESM default export inconsistencies
-        const initFn = (initYoga as any).default || initYoga;
+        console.log('YogaService: Dynamically importing yoga-layout...');
+        const yogaModule = await import('yoga-layout');
+        const initFn = (yogaModule as any).default || yogaModule;
+        
         const loaded = await initFn(wasmBuffer);
 
         // Normalize the loaded module to ensure we have access to the API

@@ -1,4 +1,4 @@
-import YogaService from './YogaService';
+import YogaService, { YogaLoadingState } from './YogaService';
 import { Object3D } from '../core/Object3D';
 
 type YogaNode = any;
@@ -16,6 +16,8 @@ export class LayoutManager {
     }
 
     public update(rootObject: Object3D, containerWidth: number, containerHeight: number, scale: number = 0.01): void {
+        if (this.yogaService.state !== YogaLoadingState.READY) return;
+        
         const rootNode = this.buildYogaTree(rootObject);
         if (!rootNode) return;
 

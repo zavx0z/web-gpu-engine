@@ -19,7 +19,7 @@ Bun.serve({
     "/models/engine.bin": file("./static/engine.bin"),
     "/models/engine.glb": file("./static/engine.glb"),
     // Serve Yoga WASM at the root so the default loader can find it
-    "/yoga.wasm": file("./node_modules/yoga-layout/dist/yoga.wasm")
+    "/yoga.wasm": file("./node_modules/yoga-layout/yoga.wasm")
   },
 })
 
