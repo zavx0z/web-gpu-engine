@@ -22,8 +22,9 @@ export class LayoutManager {
         if (!rootNode) return;
 
         // Calculate Layout
-        // 0 corresponds to Direction.LTR
-        rootNode.calculateLayout(containerWidth, containerHeight, this.yoga.Direction ? this.yoga.Direction.LTR : 0);
+        // Use DIRECTION_LTR constant or fallback to 1 (LTR)
+        const direction = this.yoga.DIRECTION_LTR !== undefined ? this.yoga.DIRECTION_LTR : 1;
+        rootNode.calculateLayout(containerWidth, containerHeight, direction);
         
         this.applyLayout(rootObject, rootNode, scale);
     }
@@ -36,44 +37,55 @@ export class LayoutManager {
                 console.error("LayoutManager: this.yoga.Node is undefined! Check initialization.");
                 return null;
             }
-            yogaNode = this.yoga.Node.create();
+            
+            if (typeof this.yoga.Node.create === 'function') {
+                yogaNode = this.yoga.Node.create();
+            } else {
+                try {
+                    // Fallback for versions where Node is a constructor
+                    yogaNode = new this.yoga.Node();
+                } catch (e) {
+                    console.error("LayoutManager: Failed to create Yoga Node. Node.create is not a function and new Node() failed.", e);
+                    return null;
+                }
+            }
+            
             this.objectToNodeMap.set(object, yogaNode);
         }
 
         if (object.layout) {
-            const { FlexDirection, Justify, Align, Edge } = this.yoga;
-
+            const yoga = this.yoga;
             if (object.layout.width !== undefined) yogaNode.setWidth(object.layout.width);
             if (object.layout.height !== undefined) yogaNode.setHeight(object.layout.height);
             
             if (object.layout.flexDirection) {
                const dir = object.layout.flexDirection;
-               if (dir === 'row') yogaNode.setFlexDirection(FlexDirection.Row);
-               if (dir === 'column') yogaNode.setFlexDirection(FlexDirection.Column);
-               if (dir === 'row-reverse') yogaNode.setFlexDirection(FlexDirection.RowReverse);
-               if (dir === 'column-reverse') yogaNode.setFlexDirection(FlexDirection.ColumnReverse);
+               if (dir === 'row') yogaNode.setFlexDirection(yoga.FLEX_DIRECTION_ROW);
+               if (dir === 'column') yogaNode.setFlexDirection(yoga.FLEX_DIRECTION_COLUMN);
+               if (dir === 'row-reverse') yogaNode.setFlexDirection(yoga.FLEX_DIRECTION_ROW_REVERSE);
+               if (dir === 'column-reverse') yogaNode.setFlexDirection(yoga.FLEX_DIRECTION_COLUMN_REVERSE);
             }
             
             if (object.layout.justifyContent) {
                const justify = object.layout.justifyContent;
-               if (justify === 'flex-start') yogaNode.setJustifyContent(Justify.FlexStart);
-               if (justify === 'center') yogaNode.setJustifyContent(Justify.Center);
-               if (justify === 'flex-end') yogaNode.setJustifyContent(Justify.FlexEnd);
-               if (justify === 'space-between') yogaNode.setJustifyContent(Justify.SpaceBetween);
-               if (justify === 'space-around') yogaNode.setJustifyContent(Justify.SpaceAround);
+               if (justify === 'flex-start') yogaNode.setJustifyContent(yoga.JUSTIFY_FLEX_START);
+               if (justify === 'center') yogaNode.setJustifyContent(yoga.JUSTIFY_CENTER);
+               if (justify === 'flex-end') yogaNode.setJustifyContent(yoga.JUSTIFY_FLEX_END);
+               if (justify === 'space-between') yogaNode.setJustifyContent(yoga.JUSTIFY_SPACE_BETWEEN);
+               if (justify === 'space-around') yogaNode.setJustifyContent(yoga.JUSTIFY_SPACE_AROUND);
             }
             
              if (object.layout.alignItems) {
                const align = object.layout.alignItems;
-               if (align === 'flex-start') yogaNode.setAlignItems(Align.FlexStart);
-               if (align === 'center') yogaNode.setAlignItems(Align.Center);
-               if (align === 'flex-end') yogaNode.setAlignItems(Align.FlexEnd);
-               if (align === 'stretch') yogaNode.setAlignItems(Align.Stretch);
-               if (align === 'baseline') yogaNode.setAlignItems(Align.Baseline);
+               if (align === 'flex-start') yogaNode.setAlignItems(yoga.ALIGN_FLEX_START);
+               if (align === 'center') yogaNode.setAlignItems(yoga.ALIGN_CENTER);
+               if (align === 'flex-end') yogaNode.setAlignItems(yoga.ALIGN_FLEX_END);
+               if (align === 'stretch') yogaNode.setAlignItems(yoga.ALIGN_STRETCH);
+               if (align === 'baseline') yogaNode.setAlignItems(yoga.ALIGN_BASELINE);
             }
             
-            if (object.layout.padding !== undefined) yogaNode.setPadding(Edge.All, object.layout.padding);
-            if (object.layout.margin !== undefined) yogaNode.setMargin(Edge.All, object.layout.margin);
+            if (object.layout.padding !== undefined) yogaNode.setPadding(yoga.EDGE_ALL, object.layout.padding);
+            if (object.layout.margin !== undefined) yogaNode.setMargin(yoga.EDGE_ALL, object.layout.margin);
         }
 
         // Reset children for the current frame to rebuild structure

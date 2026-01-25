@@ -1,5 +1,3 @@
-// import initYoga from 'yoga-layout'; // Converted to dynamic import
-
 export enum YogaLoadingState {
   PENDING,
   LOADING,
@@ -45,35 +43,54 @@ export class YogaService {
 
     this.initializationPromise = (async () => {
       try {
-        // Fetch the WASM file manually to support various bundlers and environments
-        const response = await fetch('/yoga.wasm');
-        if (!response.ok) {
-          throw new Error(`Failed to load /yoga.wasm: ${response.status} ${response.statusText}`);
-        }
-        const wasmBuffer = await response.arrayBuffer();
-        console.log(`YogaService: Downloaded WASM size: ${wasmBuffer.byteLength} bytes`);
-
-        // Handle ESM default export inconsistencies
-        console.log('YogaService: Dynamically importing yoga-layout...');
-        const yogaModule = await import('yoga-layout');
-        const initFn = (yogaModule as any).default || yogaModule;
+        // Используем браузерную сборку с base64 WASM встроенным в код
+        // Браузер не может импортировать из node_modules напрямую, поэтому используем URL
+        console.log('YogaService: Dynamically importing yoga-layout browser build...');
         
-        const loaded = await initFn(wasmBuffer);
-
-        // Normalize the loaded module to ensure we have access to the API
-        if (loaded && loaded.Node) {
-          this._yoga = loaded;
-        } else if (loaded && loaded.default && loaded.default.Node) {
-          this._yoga = loaded.default;
-        } else if (loaded && loaded.Yoga && loaded.Yoga.Node) {
-          this._yoga = loaded.Yoga;
+        // Пробуем несколько вариантов импорта
+        let yogaModule;
+        try {
+          // Вариант 1: Прямой импорт через наш сервер (нужно добавить маршрут в server.ts)
+          yogaModule = await import('/yoga-wasm-base64-esm.js');
+        } catch (e) {
+          // Вариант 2: Используем оригинальный пакет через скрипт-тег
+          console.log('YogaService: Falling back to manual loading...');
+          
+          // Создаем script элемент для загрузки UMD версии
+          const script = document.createElement('script');
+          script.src = '/yoga-wasm-base64-umd.js';
+          script.type = 'text/javascript';
+          
+          await new Promise((resolve, reject) => {
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+          
+          // UMD версия экспортирует Yoga в глобальную область видимости
+          // @ts-ignore
+          if (typeof window.Yoga !== 'undefined') {
+            // @ts-ignore
+            this._yoga = window.Yoga;
+            this._state = YogaLoadingState.READY;
+            console.log('YogaService: WASM loaded successfully from UMD script.');
+            return this._yoga;
+          } else {
+            throw new Error('Yoga not found in global scope after loading UMD script');
+          }
+        }
+        
+        // Для ES модуля получаем экспорт
+        const yogaExport = yogaModule.default || yogaModule;
+        
+        if (typeof yogaExport === 'function') {
+          this._yoga = await yogaExport();
         } else {
-          this._yoga = loaded;
-          console.warn('YogaService: Loaded object structure unknown, using as is.', Object.keys(loaded));
+          this._yoga = yogaExport;
         }
 
         this._state = YogaLoadingState.READY;
-        console.log('YogaService: WASM loaded successfully.');
+        console.log('YogaService: WASM loaded successfully from ES module.');
         return this._yoga;
       } catch (error) {
         this._state = YogaLoadingState.ERROR;

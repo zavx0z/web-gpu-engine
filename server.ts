@@ -18,8 +18,7 @@ Bun.serve({
     "/models/engine.gltf": file("./static/engine.gltf"),
     "/models/engine.bin": file("./static/engine.bin"),
     "/models/engine.glb": file("./static/engine.glb"),
-    // Serve Yoga WASM at the root so the default loader can find it
-    "/yoga.wasm": file("./node_modules/yoga-layout/yoga.wasm")
+    "/yoga-wasm-base64-esm.js": file("./node_modules/yoga-layout/dist/binaries/yoga-wasm-base64-esm.js"),
   },
 })
 
