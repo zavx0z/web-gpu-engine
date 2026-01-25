@@ -27,6 +27,7 @@ import { Matrix4 } from "../src/math/Matrix4"
 import { Vector3 } from "../src/math/Vector3"
 import YogaService from "../src/layout/YogaService"
 import { LayoutManager } from "../src/layout/LayoutManager"
+import { UIDisplay } from "../src/ui/UIDisplay"
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("🚀 Application Starting...");
@@ -95,34 +96,55 @@ document.addEventListener("DOMContentLoaded", async () => {
   light.updateMatrix()
   scene.add(light)
 
-  // --- Layout Example ---
+  // --- Layout Example: Physical Display ---
   const layoutManager = new LayoutManager()
-  const uiContainer = new Object3D()
-  uiContainer.layout = {
-    width: 150,
-    height: 300,
-    flexDirection: "column",
-    justifyContent: "space-evenly",
-    alignItems: "center",
-  }
-  uiContainer.position.set(-0.8, -0.2, 1.0)
-  uiContainer.updateMatrix()
-  scene.add(uiContainer)
 
-  const textMaterial = new TextMaterial({ color: new Color(1.0, 1.0, 1.0) })
+  // Создаем дисплей: 0.4м ширина, 0.3м высота (40х30 см)
+  // Разрешение: 800x600 пикселей
+  const display = new UIDisplay({
+    width: 0.4,
+    height: 0.3,
+    pixelWidth: 800,
+    pixelHeight: 600,
+    background: new Color(0.05, 0.05, 0.05) // Темно-серый корпус
+  })
+
+  // Позиционируем дисплей в мире (метры)
+  // Ставим слева от центра, на уровне глаз робота
+  display.position.set(-0.6, 0, 1.2)
+  // Поворачиваем вертикально (Plane изначально лежит в XY, нам нужно повернуть X на 90, чтобы он встал вертикально)
+  // И затем повернуть к камере.
+  // В Z-up:
+  // PlaneGeometry (XY plane).
+  // rotation.x = 90deg (PI/2) -> становится XZ плоскостью (лицом к -Y)
+  display.rotation.x = Math.PI / 2
+  // Довернем немного к зрителю
+  display.rotation.z = Math.PI / 6
+
+  display.updateMatrix()
+  scene.add(display)
+
+  const textMaterial = new TextMaterial({ color: new Color(0.4, 0.8, 1.0) }) // Голубой текст терминала
   const fontLoaded = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
 
-  const text1 = new Text("Flex", fontLoaded, 0.15, textMaterial)
-  text1.layout = { margin: 5, width: 100, height: 20 }
-  uiContainer.add(text1)
+  // Хелпер для создания текстовых элементов с пиксельными размерами
+  const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
+    const fontSizeWorld = display.getFontSize(fontSizePx)
+    const t = new Text(str, fontLoaded, fontSizeWorld, textMaterial)
+    // В Yoga задаем размеры в пикселях
+    t.layout = {
+        margin: marginTopPx,
+        height: fontSizePx * 1.2, // Чуть больше высоты шрифта
+        width: '100%' // На всю ширину контейнера (с учетом паддингов)
+    }
+    return t
+  }
 
-  const text2 = new Text("Yoga", fontLoaded, 0.15, textMaterial)
-  text2.layout = { margin: 5, width: 100, height: 20 }
-  uiContainer.add(text2)
-
-  const text3 = new Text("GPU", fontLoaded, 0.15, textMaterial)
-  text3.layout = { margin: 5, width: 100, height: 20 }
-  uiContainer.add(text3)
+  display.addUI(createUIText("SYSTEM ONLINE", 48, 0))
+  display.addUI(createUIText("----------------", 24, 10))
+  display.addUI(createUIText("GPU: ACTIVE", 32, 20))
+  display.addUI(createUIText("MEM: 12GB / 16GB", 32, 10))
+  display.addUI(createUIText("TASKS: 4 RUNNING", 32, 10))
 
   // --- Загрузка GLTF модели ---
   console.log("📥 Loading GLTF Model...");
@@ -259,14 +281,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     frameCount++;
     if (frameCount % 100 === 0) console.log(`Stats: Frame ${frameCount}`);
     
-    // Billboard: Make UI face the camera
-    // Text faces +Z, lookAt makes -Z face target.
-    // We want +Z to face camera, so -Z should face AWAY from camera.
-    // Target = UI + (UI - Camera)
-    const target = new Vector3().subVectors(uiContainer.position, viewPoint.position).add(uiContainer.position)
-    uiContainer.lookAt(target)
-
-    layoutManager.update(uiContainer, 150, 300, 0.01)
+    // Обновляем лейаут дисплея
+    // Передаем корневой контейнер контента, размеры в ПИКСЕЛЯХ и масштаб (метры/пиксель)
+    layoutManager.update(
+        display.contentContainer,
+        display.pixelWidth,
+        display.pixelHeight,
+        display.pixelScale
+    )
 
     const currentTime = performance.now()
     const delta = (currentTime - lastTime) / 1000
