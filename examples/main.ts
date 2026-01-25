@@ -178,22 +178,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // 2. Создаем текст
     const t = new Text(str, fontLoaded, fontSizeWorld, textMaterial)
     
-  // 3. Создаем контейнер-точку (Pivot)
-  const container = new Object3D()
-  container.layout = {
+    // 3. Создаем контейнер-точку (Pivot)
+    const container = new Object3D()
+    container.layout = {
       margin: marginTopPx,
       height: fontSizePx * 1.2,
-      // Ширина не задана -> Yoga сожмет контейнер до 0 (так как нет контента с размерами)
-      // alignSelf: 'center' -> Yoga поместит этот "нулевой" контейнер по центру родителя (дисплея)
+      // Ширина не задана -> Yoga сожмет контейнер до 0. 
+      // alignSelf: 'center' -> Yoga поместит контейнер по центру (left = W/2).
       alignSelf: 'center'
-  }
+    }
 
-    // 4. Позиционируем текст: сдвигаем влево на половину ширины экрана и половину ширины текста
-    // Эмпирическая коррекция: похоже, что точка привязки находится на правом краю или смещена
+    // 4. Позиционируем текст.
+    // Точка (0,0) контейнера оказывается смещена вправо на W/2 (центр экрана).
+    // Чтобы центрировать текст, сдвигаем его влево на половину ширины экрана (-W/2)
+    // и на половину ширины самого текста (-textWidth/2).
     t.position.x = -display.physicalWidth / 2 - textWidthWorld / 2
     t.position.y = -fontSizeWorld
+    
     t.updateMatrix()
-
     container.add(t)
     return container
   }
