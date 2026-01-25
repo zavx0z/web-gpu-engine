@@ -26,7 +26,7 @@ export class LayoutManager {
         const direction = this.yoga.DIRECTION_LTR !== undefined ? this.yoga.DIRECTION_LTR : 1;
         rootNode.calculateLayout(containerWidth, containerHeight, direction);
         
-        this.applyLayout(rootObject, rootNode, scale);
+        this.applyLayout(rootObject, rootNode, scale, true);
     }
 
     private buildYogaTree(object: Object3D): YogaNode {
@@ -73,6 +73,7 @@ export class LayoutManager {
                if (justify === 'flex-end') yogaNode.setJustifyContent(yoga.JUSTIFY_FLEX_END);
                if (justify === 'space-between') yogaNode.setJustifyContent(yoga.JUSTIFY_SPACE_BETWEEN);
                if (justify === 'space-around') yogaNode.setJustifyContent(yoga.JUSTIFY_SPACE_AROUND);
+               if (justify === 'space-evenly') yogaNode.setJustifyContent(yoga.JUSTIFY_SPACE_EVENLY);
             }
             
              if (object.layout.alignItems) {
@@ -109,23 +110,24 @@ export class LayoutManager {
         return yogaNode;
     }
 
-    private applyLayout(object: Object3D, yogaNode: YogaNode, scale: number): void {
-        const left = yogaNode.getComputedLeft();
-        const top = yogaNode.getComputedTop();
-        
-        // Convert 2D Layout coordinates (Top-Left 0,0, Y-down) to 3D (Center 0,0, Y-up)
-        // We simply map Layout Top to negative Y in 3D.
-        object.position.x = left * scale;
-        object.position.y = -top * scale;
+    private applyLayout(object: Object3D, yogaNode: YogaNode, scale: number, isRoot: boolean = false): void {
+        if (!isRoot) {
+            const left = yogaNode.getComputedLeft();
+            const top = yogaNode.getComputedTop();
+            
+            // Convert 2D Layout coordinates (Top-Left 0,0, Y-down) to 3D (Center 0,0, Y-up)
+            // We simply map Layout Top to negative Y in 3D.
+            object.position.x = left * scale;
+            object.position.y = -top * scale;
+        }
         
         object.updateMatrix();
-
         let childIndex = 0;
         for (const child of object.children) {
              if (child.layout) {
                 const childYogaNode = yogaNode.getChild(childIndex);
                 if (childYogaNode) {
-                    this.applyLayout(child, childYogaNode, scale);
+                    this.applyLayout(child, childYogaNode, scale, false);
                 }
                 childIndex++;
             }

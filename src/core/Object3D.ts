@@ -113,6 +113,13 @@ export class Object3D {
     this.modelMatrix.compose(this.position, this.quaternion, this.scale);
   }
 
+  public lookAt(target: Vector3): void {
+    const m = new Matrix4()
+    m.makeLookAt(this.position, target, new Vector3(0, 0, 1))
+    m.invert()
+    this.quaternion.setFromRotationMatrix(m)
+  }
+
   public updateWorldMatrix(force: boolean = false): void {
     this.updateMatrix();
     if (this.parent) {

@@ -99,30 +99,29 @@ document.addEventListener("DOMContentLoaded", async () => {
   const layoutManager = new LayoutManager()
   const uiContainer = new Object3D()
   uiContainer.layout = {
-    width: 600,
-    height: 200,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    width: 150,
+    height: 300,
+    flexDirection: "column",
+    justifyContent: "space-evenly",
     alignItems: "center",
   }
-  uiContainer.position.set(-3, 0, 2)
-  uiContainer.rotation.x = Math.PI / 8
+  uiContainer.position.set(-0.8, -0.2, 1.0)
   uiContainer.updateMatrix()
   scene.add(uiContainer)
 
   const textMaterial = new TextMaterial({ color: new Color(1.0, 1.0, 1.0) })
   const fontLoaded = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
 
-  const text1 = new Text("Flex", fontLoaded, 0.4, textMaterial)
-  text1.layout = { margin: 10, width: 100, height: 40 }
+  const text1 = new Text("Flex", fontLoaded, 0.15, textMaterial)
+  text1.layout = { margin: 5, width: 100, height: 20 }
   uiContainer.add(text1)
 
-  const text2 = new Text("Yoga", fontLoaded, 0.4, textMaterial)
-  text2.layout = { margin: 10, width: 100, height: 40 }
+  const text2 = new Text("Yoga", fontLoaded, 0.15, textMaterial)
+  text2.layout = { margin: 5, width: 100, height: 20 }
   uiContainer.add(text2)
 
-  const text3 = new Text("GPU", fontLoaded, 0.4, textMaterial)
-  text3.layout = { margin: 10, width: 100, height: 40 }
+  const text3 = new Text("GPU", fontLoaded, 0.15, textMaterial)
+  text3.layout = { margin: 5, width: 100, height: 20 }
   uiContainer.add(text3)
 
   // --- Загрузка GLTF модели ---
@@ -259,8 +258,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     requestAnimationFrame(animate)
     frameCount++;
     if (frameCount % 100 === 0) console.log(`Stats: Frame ${frameCount}`);
+    
+    // Billboard: Make UI face the camera
+    // Text faces +Z, lookAt makes -Z face target.
+    // We want +Z to face camera, so -Z should face AWAY from camera.
+    // Target = UI + (UI - Camera)
+    const target = new Vector3().subVectors(uiContainer.position, viewPoint.position).add(uiContainer.position)
+    uiContainer.lookAt(target)
 
-    layoutManager.update(uiContainer, 600, 200, 0.01)
+    layoutManager.update(uiContainer, 150, 300, 0.01)
 
     const currentTime = performance.now()
     const delta = (currentTime - lastTime) / 1000
