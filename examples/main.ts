@@ -25,6 +25,7 @@ import {
   Line,
   LineBasicMaterial,
 } from "../src"
+
 import { Matrix4 } from "../src/math/Matrix4"
 import { Vector3 } from "../src/math/Vector3"
 import YogaService from "../src/layout/YogaService"
@@ -40,7 +41,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log("✅ Yoga Layout Initialized");
   } catch (e) {
     console.error("⚠️ WARNING: Yoga failed to load. Layouts may not work.", e);
-    // Do not return, let the renderer try to start
   }
 
   console.log("🔧 Initializing Renderer...");
@@ -62,12 +62,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   renderer.setPixelRatio(window.devicePixelRatio)
   renderer.setSize(window.innerWidth, window.innerHeight)
-
   window.addEventListener("resize", () => {
     renderer.setSize(window.innerWidth, window.innerHeight)
     viewPoint.setAspectRatio(window.innerWidth / window.innerHeight)
   })
-
   document.body.appendChild(renderer.canvas)
 
   const scene = new Scene()
@@ -111,83 +109,94 @@ document.addEventListener("DOMContentLoaded", async () => {
     background: new Color(0.05, 0.05, 0.05) // Темно-серый корпус
   })
 
-// Позиционируем дисплей в мире (метры)
-const displayHeight = 1.1 // Высота центра экрана от пола
-display.position.set(0.8, -0.5, displayHeight)
+  // Позиционируем дисплей в мире (метры)
+  const displayHeight = 1.1 // Высота центра экрана от пола
+  display.position.set(0.8, -0.5, displayHeight)
+  
+  // Ориентация: Вертикально, повернут к зрителю
+  display.rotation.x = Math.PI / 2 
+  // display.rotation.z = Math.PI / 4 
+  display.updateMatrix()
+  scene.add(display)
 
-// Ориентация: Вертикально, повернут к зрителю
-display.rotation.x = Math.PI / 2 
-// display.rotation.z = Math.PI / 4 
-display.updateMatrix()
-scene.add(display)
-
-// --- Создаем стойку (Ножку) для дисплея ---
-// Рисуем линию от центра дисплея до пола
-const poleGeo = new BufferGeometry()
-// В локальных координатах дисплея: (0,0,0) - центр.
-// Так как дисплей повернут по X на 90, его локальная ось Y смотрит ВНИЗ (вдоль мирового -Z).
-// Значит, чтобы нарисовать ножку до пола, нам нужна линия от (0,0,0) до (0, displayHeight, 0) по локальной Y.
-const poleVertices = new Float32Array([
-    0, 0, 0, 
-    0, displayHeight, 0
-])
-poleGeo.setAttribute('position', new BufferAttribute(poleVertices, 3))
-const poleMat = new LineBasicMaterial({ color: 0x666666, opacity: 0.5 })
-const pole = new Line(poleGeo, poleMat)
-// Сдвигаем ножку немного назад по локальной Z, чтобы она была за экраном
-pole.position.z = -0.02
-display.add(pole)
+  // --- Создаем стойку (Ножку) для дисплея ---
+  // Рисуем линию от центра дисплея до пола
+  const poleGeo = new BufferGeometry()
+  // В локальных координатах дисплея: (0,0,0) - центр.
+  // Так как дисплей повернут по X на 90, его локальная ось Y смотрит ВНИЗ (вдоль мирового -Z).
+  // Значит, чтобы нарисовать ножку до пола, нам нужна линия от (0,0,0) до (0, displayHeight, 0) по локальной Y.
+  const poleVertices = new Float32Array([
+      0, 0, 0, 
+      0, displayHeight, 0
+  ])
+  poleGeo.setAttribute('position', new BufferAttribute(poleVertices, 3))
+  const poleMat = new LineBasicMaterial({ color: 0x666666, opacity: 0.5 })
+  const pole = new Line(poleGeo, poleMat)
+  // Сдвигаем ножку немного назад по локальной Z, чтобы она была за экраном
+  pole.position.z = -0.02
+  display.add(pole)
 
   const textMaterial = new TextMaterial({ color: new Color(0.4, 0.8, 1.0) }) // Голубой текст терминала
   const fontLoaded = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
 
-// Функция измерения ширины текста через метрики шрифта
-const measureTextWidth = (text: string, font: TrueTypeFont, fontSize: number) => {
-    let width = 0
-    const scale = fontSize / font.unitsPerEm
-    const letterSpacing = fontSize * 0.05
-    for (const char of text) {
-        if (char === ' ') {
-            width += font.unitsPerEm * 0.3 * scale
-            continue
-        }
-        const gid = font.mapCharToGlyph(char.codePointAt(0)!)
-        const metric = font.getHMetric(gid)
-        width += metric.advanceWidth * scale + letterSpacing
-    }
-    return width
-}
+  // Функция измерения ширины текста через метрики шрифта
+  const measureTextWidth = (text: string, font: TrueTypeFont, fontSize: number) => {
+      let width = 0
+      // Попытка точного расчета
+      try {
+          const scale = fontSize / font.unitsPerEm
+          const letterSpacing = fontSize * 0.05
+          for (const char of text) {
+              if (char === ' ') {
+                  width += font.unitsPerEm * 0.3 * scale
+                  continue
+              }
+              const gid = font.mapCharToGlyph(char.codePointAt(0)!)
+              const metric = font.getHMetric(gid)
+              width += metric.advanceWidth * scale + letterSpacing
+          }
+      } catch (e) {
+          console.warn('Text measurement failed, using heuristic', e)
+      }
+      
+      // Если расчет вернул 0 (ошибка метрик), используем эвристику для моноширинного шрифта
+      if (width === 0) {
+          console.warn(`MeasureTextWidth: Calculated 0 width for '${text}', using heuristic.`);
+          width = text.length * (fontSize * 0.6)
+      }
+      console.log(`Text '${text}': width=${width}, fontSize=${fontSize}`);
+      return width
+  }
 
-// Хелпер для создания текстовых элементов с пиксельными размерами
-const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
-  const fontSizeWorld = display.getFontSize(fontSizePx)
-  
-  // 1. Точно вычисляем ширину текста в метрах
-  const textWidthWorld = measureTextWidth(str, fontLoaded, fontSizeWorld)
+  // Хелпер для создания текстовых элементов с пиксельными размерами
+  const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
+    const fontSizeWorld = display.getFontSize(fontSizePx)
+    
+    // 1. Точно вычисляем ширину текста в метрах
+    const textWidthWorld = measureTextWidth(str, fontLoaded, fontSizeWorld)
 
-  // 2. Создаем текст
-  const t = new Text(str, fontLoaded, fontSizeWorld, textMaterial)
-  
-  // 3. Создаем контейнер
+    // 2. Создаем текст
+    const t = new Text(str, fontLoaded, fontSizeWorld, textMaterial)
+    
+  // 3. Создаем контейнер-точку (Pivot)
   const container = new Object3D()
   container.layout = {
       margin: marginTopPx,
       height: fontSizePx * 1.2,
-      // Конвертируем ширину обратно в пиксели для Yoga
-      width: textWidthWorld / display.pixelScale, 
-      alignSelf: 'center' // Yoga центрирует контейнер
+      // Ширина не задана -> Yoga сожмет контейнер до 0 (так как нет контента с размерами)
+      // alignSelf: 'center' -> Yoga поместит этот "нулевой" контейнер по центру родителя (дисплея)
+      alignSelf: 'center'
   }
 
-  // 4. Позиционируем текст внутри контейнера
-  // X: 0 (левый край контейнера, который уже отцентрирован)
-  // Y: сдвигаем вниз на высоту шрифта для вертикального выравнивания
-  t.position.x = 0
-  t.position.y = -fontSizeWorld
-  t.updateMatrix()
+    // 4. Позиционируем текст: сдвигаем влево на половину ширины экрана и половину ширины текста
+    // Эмпирическая коррекция: похоже, что точка привязки находится на правом краю или смещена
+    t.position.x = -display.physicalWidth / 2 - textWidthWorld / 2
+    t.position.y = -fontSizeWorld
+    t.updateMatrix()
 
-  container.add(t)
-  return container
-}
+    container.add(t)
+    return container
+  }
 
   display.addUI(createUIText("SYSTEM ONLINE", 48, 0))
   display.addUI(createUIText("----------------", 24, 10))
@@ -274,6 +283,7 @@ const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
     }),
     instanceCount,
   )
+
   spheresInsideTorus.setMaterialAt(
     1,
     new LineGlowMaterial({
@@ -285,7 +295,6 @@ const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
 
   const tempMatrix = new Matrix4()
   const tempVector = new Vector3()
-
   tempMatrix.identity()
   tempMatrix.makeTranslation(-0.1, 0, 0)
   tempVector.set(0.5, 0.5, 0.5)
@@ -318,6 +327,7 @@ const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
     { amplitude: 0.015, speedX: 3.5, speedY: 4.2, speedZ: 2.8 },
     { amplitude: 0.018, speedX: 4.1, speedY: 3.7, speedZ: 2.4 },
   ]
+
   let torusPhase = Math.random() * Math.PI * 2
   let spherePhases = [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2]
 
@@ -379,6 +389,7 @@ const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
         sphereRelativePositions[i].y + sphereOffsetY,
         sphereRelativePositions[i].z + sphereOffsetZ,
       )
+
       tempMatrix.identity()
       tempMatrix.makeTranslation(newPos.x, newPos.y, newPos.z)
       tempVector.set(0.5, 0.5, 0.5)
@@ -390,12 +401,12 @@ const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
     torus.updateMatrix()
     spheresInsideTorus.updateMatrix()
     scene.updateWorldMatrix()
+
     gltf.scene.traverse((obj: any) => {
       if (obj.isSkinnedMesh) obj.skeleton.update()
     })
     
     renderer.render(scene, viewPoint)
   }
-
   animate()
 })

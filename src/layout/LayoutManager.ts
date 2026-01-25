@@ -84,6 +84,16 @@ export class LayoutManager {
                if (align === 'stretch') yogaNode.setAlignItems(yoga.ALIGN_STRETCH);
                if (align === 'baseline') yogaNode.setAlignItems(yoga.ALIGN_BASELINE);
             }
+
+            if (object.layout.alignSelf) {
+               const align = object.layout.alignSelf;
+               if (align === 'auto') yogaNode.setAlignSelf(yoga.ALIGN_AUTO);
+               if (align === 'flex-start') yogaNode.setAlignSelf(yoga.ALIGN_FLEX_START);
+               if (align === 'center') yogaNode.setAlignSelf(yoga.ALIGN_CENTER);
+               if (align === 'flex-end') yogaNode.setAlignSelf(yoga.ALIGN_FLEX_END);
+               if (align === 'stretch') yogaNode.setAlignSelf(yoga.ALIGN_STRETCH);
+               if (align === 'baseline') yogaNode.setAlignSelf(yoga.ALIGN_BASELINE);
+            }
             
             if (object.layout.padding !== undefined) yogaNode.setPadding(yoga.EDGE_ALL, object.layout.padding);
             if (object.layout.margin !== undefined) yogaNode.setMargin(yoga.EDGE_ALL, object.layout.margin);
