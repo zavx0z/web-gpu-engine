@@ -22,6 +22,8 @@ import {
   WireframeInstancedMesh,
   Raycaster,
   Object3D,
+  Line,
+  LineBasicMaterial,
 } from "../src"
 import { Matrix4 } from "../src/math/Matrix4"
 import { Vector3 } from "../src/math/Vector3"
@@ -109,36 +111,83 @@ document.addEventListener("DOMContentLoaded", async () => {
     background: new Color(0.05, 0.05, 0.05) // Темно-серый корпус
   })
 
-  // Позиционируем дисплей в мире (метры)
-  // Ставим слева от центра, на уровне глаз робота
-  display.position.set(-0.6, 0, 1.2)
-  // Поворачиваем вертикально (Plane изначально лежит в XY, нам нужно повернуть X на 90, чтобы он встал вертикально)
-  // И затем повернуть к камере.
-  // В Z-up:
-  // PlaneGeometry (XY plane).
-  // rotation.x = 90deg (PI/2) -> становится XZ плоскостью (лицом к -Y)
-  display.rotation.x = Math.PI / 2
-  // Довернем немного к зрителю
-  display.rotation.z = Math.PI / 6
+// Позиционируем дисплей в мире (метры)
+const displayHeight = 1.1 // Высота центра экрана от пола
+display.position.set(0.8, -0.5, displayHeight)
 
-  display.updateMatrix()
-  scene.add(display)
+// Ориентация: Вертикально, повернут к зрителю
+display.rotation.x = Math.PI / 2 
+// display.rotation.z = Math.PI / 4 
+display.updateMatrix()
+scene.add(display)
+
+// --- Создаем стойку (Ножку) для дисплея ---
+// Рисуем линию от центра дисплея до пола
+const poleGeo = new BufferGeometry()
+// В локальных координатах дисплея: (0,0,0) - центр.
+// Так как дисплей повернут по X на 90, его локальная ось Y смотрит ВНИЗ (вдоль мирового -Z).
+// Значит, чтобы нарисовать ножку до пола, нам нужна линия от (0,0,0) до (0, displayHeight, 0) по локальной Y.
+const poleVertices = new Float32Array([
+    0, 0, 0, 
+    0, displayHeight, 0
+])
+poleGeo.setAttribute('position', new BufferAttribute(poleVertices, 3))
+const poleMat = new LineBasicMaterial({ color: 0x666666, opacity: 0.5 })
+const pole = new Line(poleGeo, poleMat)
+// Сдвигаем ножку немного назад по локальной Z, чтобы она была за экраном
+pole.position.z = -0.02
+display.add(pole)
 
   const textMaterial = new TextMaterial({ color: new Color(0.4, 0.8, 1.0) }) // Голубой текст терминала
   const fontLoaded = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
 
-  // Хелпер для создания текстовых элементов с пиксельными размерами
-  const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
-    const fontSizeWorld = display.getFontSize(fontSizePx)
-    const t = new Text(str, fontLoaded, fontSizeWorld, textMaterial)
-    // В Yoga задаем размеры в пикселях
-    t.layout = {
-        margin: marginTopPx,
-        height: fontSizePx * 1.2, // Чуть больше высоты шрифта
-        width: '100%' // На всю ширину контейнера (с учетом паддингов)
+// Функция измерения ширины текста через метрики шрифта
+const measureTextWidth = (text: string, font: TrueTypeFont, fontSize: number) => {
+    let width = 0
+    const scale = fontSize / font.unitsPerEm
+    const letterSpacing = fontSize * 0.05
+    for (const char of text) {
+        if (char === ' ') {
+            width += font.unitsPerEm * 0.3 * scale
+            continue
+        }
+        const gid = font.mapCharToGlyph(char.codePointAt(0)!)
+        const metric = font.getHMetric(gid)
+        width += metric.advanceWidth * scale + letterSpacing
     }
-    return t
+    return width
+}
+
+// Хелпер для создания текстовых элементов с пиксельными размерами
+const createUIText = (str: string, fontSizePx: number, marginTopPx: number) => {
+  const fontSizeWorld = display.getFontSize(fontSizePx)
+  
+  // 1. Точно вычисляем ширину текста в метрах
+  const textWidthWorld = measureTextWidth(str, fontLoaded, fontSizeWorld)
+
+  // 2. Создаем текст
+  const t = new Text(str, fontLoaded, fontSizeWorld, textMaterial)
+  
+  // 3. Создаем контейнер
+  const container = new Object3D()
+  container.layout = {
+      margin: marginTopPx,
+      height: fontSizePx * 1.2,
+      // Конвертируем ширину обратно в пиксели для Yoga
+      width: textWidthWorld / display.pixelScale, 
+      alignSelf: 'center' // Yoga центрирует контейнер
   }
+
+  // 4. Позиционируем текст внутри контейнера
+  // X: 0 (левый край контейнера, который уже отцентрирован)
+  // Y: сдвигаем вниз на высоту шрифта для вертикального выравнивания
+  t.position.x = 0
+  t.position.y = -fontSizeWorld
+  t.updateMatrix()
+
+  container.add(t)
+  return container
+}
 
   display.addUI(createUIText("SYSTEM ONLINE", 48, 0))
   display.addUI(createUIText("----------------", 24, 10))
@@ -280,7 +329,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     requestAnimationFrame(animate)
     frameCount++;
     if (frameCount % 100 === 0) console.log(`Stats: Frame ${frameCount}`);
-    
+
     // Обновляем лейаут дисплея
     // Передаем корневой контейнер контента, размеры в ПИКСЕЛЯХ и масштаб (метры/пиксель)
     layoutManager.update(

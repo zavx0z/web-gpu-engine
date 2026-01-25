@@ -2,6 +2,10 @@ import { Object3D } from "../core/Object3D"
 import { Mesh } from "../core/Mesh"
 import { PlaneGeometry } from "../geometries/PlaneGeometry"
 import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
+import { LineSegments } from "../objects/LineSegments"
+import { LineBasicMaterial } from "../materials/LineBasicMaterial"
+import { BufferGeometry, BufferAttribute } from "../core/BufferGeometry"
+import { Line } from "../objects/Line"
 import { Color } from "../math/Color"
 import { LayoutProps } from "../layout/LayoutTypes"
 
@@ -86,6 +90,28 @@ export class UIDisplay extends Object3D {
     )
 
     this.add(this.contentContainer)
+
+    // 3. Создаем рамку (Border)
+    this.createBorder()
+  }
+
+  private createBorder(): void {
+    const w = this.physicalWidth / 2
+    const h = this.physicalHeight / 2
+    // Контур прямоугольника
+    const vertices = new Float32Array([
+        -w, h, 0,   w, h, 0,
+        w, h, 0,    w, -h, 0,
+        w, -h, 0,   -w, -h, 0,
+        -w, -h, 0,  -w, h, 0
+    ])
+    const borderGeo = new BufferGeometry()
+    borderGeo.setAttribute('position', new BufferAttribute(vertices, 3))
+    const borderMat = new LineBasicMaterial({ color: 0x555555 })
+    const border = new LineSegments(borderGeo, borderMat)
+    // Сдвигаем рамку чуть вперед, чтобы была поверх фона
+    border.position.z = 0.001
+    this.add(border)
   }
 
   /**
