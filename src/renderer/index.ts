@@ -237,7 +237,21 @@ export class Renderer {
       fragment: {
         module: staticShaderModule,
         entryPoint: "fs_main",
-        targets: [{ format: this.presentationFormat }],
+        targets: [{
+          format: this.presentationFormat,
+          blend: {
+            color: {
+              srcFactor: "src-alpha",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add",
+            },
+            alpha: {
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add",
+            },
+          },
+        }],
       },
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: {

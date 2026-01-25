@@ -106,7 +106,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     height: 0.3,
     pixelWidth: 800,
     pixelHeight: 600,
-    background: new Color(0.05, 0.05, 0.05) // Темно-серый корпус
+    // Vision Pro Style: Surface-900 (rgb(27, 38, 52)) with 0.5 opacity
+    background: new Color(27 / 255, 38 / 255, 52 / 255, 0.5)
   })
 
   // Позиционируем дисплей в мире (метры)
@@ -136,7 +137,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   pole.position.z = -0.02
   display.add(pole)
 
-  const textMaterial = new TextMaterial({ color: new Color(0.4, 0.8, 1.0) }) // Голубой текст терминала
+  // Vision Pro Style: Font Color Surface-50 (rgb(225, 228, 233))
+  const textMaterial = new TextMaterial({ color: new Color(225 / 255, 228 / 255, 233 / 255) })
   const fontLoaded = await TrueTypeFont.fromUrl("./JetBrainsMono-Bold.ttf")
 
   // Функция измерения ширины текста через метрики шрифта

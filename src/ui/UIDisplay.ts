@@ -93,7 +93,8 @@ export class UIDisplay extends Object3D {
     ])
     const borderGeo = new BufferGeometry()
     borderGeo.setAttribute('position', new BufferAttribute(vertices, 3))
-    const borderMat = new LineBasicMaterial({ color: 0x555555 })
+    // Vision Pro Style: Border Surface-400 (rgb(116, 130, 151) -> 0x748297)
+    const borderMat = new LineBasicMaterial({ color: 0x748297 })
     const border = new LineSegments(borderGeo, borderMat)
     // Сдвигаем рамку чуть вперед, чтобы была поверх фона
     border.position.z = 0.001
