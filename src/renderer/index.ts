@@ -630,11 +630,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const lightList: LightItem[] = []
     collectSceneObjects(scene, renderList, lightList, this.frustum)
 
-    if (renderList.length === 0) {
-      console.warn("⚠️ RenderList is empty! Check camera, scene or visibility.");
-    } else if (Math.random() < 0.01) {
-      console.log(`📊 Rendering ${renderList.length} objects, ${lightList.length} lights`);
-    }
+
 
     this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
 
