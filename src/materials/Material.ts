@@ -30,6 +30,12 @@ export abstract class Material {
   public vertexColors: boolean
 
   /**
+   * Флаг для идентификации стеклянных материалов.
+   * @default false
+   */
+  public readonly isGlassMaterial: boolean = false
+
+  /**
    * @param parameters Параметры материала.
    */
   constructor(parameters: MaterialParameters = {}) {

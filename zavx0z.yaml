@@ -19,6 +19,6 @@ exclude:
   - JetBrainsMono-Bold.ttf
   - "*.bin"
   - '*.glb'
-  - roadmap
+  # - roadmap
   - '*.blend'
   - media
