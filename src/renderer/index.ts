@@ -364,7 +364,21 @@ export class Renderer {
       fragment: {
         module: skinnedShaderModule,
         entryPoint: "fs_main",
-        targets: [{ format: this.presentationFormat }],
+        targets: [{
+          format: this.presentationFormat,
+          blend: {
+            color: {
+              srcFactor: "src-alpha",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            },
+            alpha: {
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            }
+          }
+        }],
       },
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: {
@@ -710,10 +724,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Функция для проверки, является ли объект или любой из его родителей UIDisplay
     const isUIDisplayOrChildOfUIDisplay = (obj: Object3D): boolean => {
-      if (obj.isUIDisplay) return true
+      if ((obj as any).isUIDisplay) return true
       let parent = obj.parent
       while (parent) {
-        if (parent.isUIDisplay) return true
+        if ((parent as any).isUIDisplay) return true
         parent = parent.parent
       }
       return false
@@ -796,19 +810,27 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     this.updateTextures()
     this.updateOffscreenTextures()
 
-    // Разделение объектов по типам для многопроходного рендеринга
-    const { glassObjects, regularObjects, uiObjects } = 
-      this.collectSceneObjectsByType(scene, viewPoint)
-
     const commandEncoder = this.device.createCommandEncoder()
     const textureView = this.context.getCurrentTexture().createView()
-
     const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
     this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
-
     this.frustum.setFromProjectionMatrix(vpMatrix)
 
-    // --- Pass 1: Рендеринг обычных объектов в offscreen-текстуру ---
+    // Collect all scene objects once.
+    const allRenderItems: RenderItem[] = []
+    const allLights: LightItem[] = []
+    collectSceneObjects(scene, allRenderItems, allLights, this.frustum)
+
+    const { glassObjects, regularObjects, uiObjects } = this.collectSceneObjectsByType(scene, viewPoint)
+
+    // Update uniform buffers once for all objects.
+    this.updateSceneUniforms(allLights, viewPoint.viewMatrix)
+    this.updatePerObjectData(allRenderItems)
+    if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
+      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, this.perObjectDataCPU.buffer)
+    }
+
+    // --- Pass 1: Render regular objects to offscreen texture ---
     if (regularObjects.length > 0 && this.offscreenTexture && this.offscreenResolvedTexture && this.offscreenDepthTexture) {
       const offscreenPassDescriptor: GPURenderPassDescriptor = {
         colorAttachments: [{
@@ -828,34 +850,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
           stencilStoreOp: 'store',
         }
       }
-
       const offscreenPassEncoder = commandEncoder.beginRenderPass(offscreenPassDescriptor)
       offscreenPassEncoder.setBindGroup(0, this.globalBindGroup!)
-      
-      // Собираем и рендерим только обычные объекты
-      const regularRenderList: RenderItem[] = []
-      const lightList: LightItem[] = []
-      this.collectRegularObjects(scene, regularRenderList, lightList, this.frustum)
-      
-      this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
-      this.updatePerObjectData(regularRenderList)
-      
-      if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
-        const uploadData = this.perObjectDataCPU.buffer
-        this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
-      }
-      
-      this.renderObjectList(offscreenPassEncoder, regularRenderList, regularRenderList)
+      this.renderObjectList(offscreenPassEncoder, regularObjects, allRenderItems)
       offscreenPassEncoder.end()
     }
 
-    // --- Pass 2: Compute Blur Passes (только если есть стеклянные объекты) ---
+    // --- Pass 2: Compute Blur Passes ---
     if (glassObjects.length > 0 && this.offscreenResolvedTexture && this.blurredIntermediateTexture && this.finalBlurredTexture) {
       this.applyBlur(commandEncoder, this.offscreenResolvedTexture, this.blurredIntermediateTexture, true)
       this.applyBlur(commandEncoder, this.blurredIntermediateTexture, this.finalBlurredTexture, false)
     }
     
-    // --- Pass 3: Финальный рендер пасс ---
+    // --- Pass 3: Final Render Pass ---
     const renderPassDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [
         {
@@ -863,12 +870,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
           resolveTarget: textureView,
           loadOp: "clear",
           storeOp: "store",
-          clearValue: {
-            r: scene.background.r,
-            g: scene.background.g,
-            b: scene.background.b,
-            a: 1.0,
-          },
+          clearValue: scene.background.toArray(),
         },
       ],
       depthStencilAttachment: {
@@ -881,93 +883,27 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         stencilStoreOp: "store",
       },
     }
-
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
     passEncoder.setBindGroup(0, this.globalBindGroup!)
     
-    // Собираем все объекты для финального рендеринга
-    const finalRenderList: RenderItem[] = []
-    const finalLightList: LightItem[] = []
-    collectSceneObjects(scene, finalRenderList, finalLightList, this.frustum)
-    
-    // Обновляем uniformы с учетом всех объектов
-    this.updateSceneUniforms(finalLightList, viewPoint.viewMatrix)
-    this.updatePerObjectData(finalRenderList)
-    
-    if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
-      const uploadData = this.perObjectDataCPU.buffer
-      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
-    }
-    
-    this.renderObjectList(passEncoder, finalRenderList, finalRenderList)
+    // In a correct implementation, we would composite the offscreen texture.
+    // For now, to fix the bug, we re-render all objects, which should now work
+    // because the uniform buffer is correct.
+    this.renderObjectList(passEncoder, allRenderItems, allRenderItems)
     
     passEncoder.end()
     this.device.queue.submit([commandEncoder.finish()])
   }
 
-  private collectRegularObjects(
-    scene: Scene,
-    renderList: RenderItem[],
-    lights: LightItem[],
-    frustum: Frustum
-  ): void {
-    const objectsToProcess: Object3D[] = [scene]
-    
-    while (objectsToProcess.length > 0) {
-      const object = objectsToProcess.pop()!
-      if (!object.visible) continue
-
-      // Пропускаем стеклянные объекты
-      if (object instanceof Mesh) {
-        const material = Array.isArray(object.material) ? object.material[0] : object.material
-        if (material?.isGlassMaterial === true) continue
-      }
-
-      // Пропускаем UI дисплеи и их дочерние объекты
-      let isUI = false
-      let current: Object3D | null = object
-      while (current) {
-        if (current.isUIDisplay === true) {
-          isUI = true
-          break
-        }
-        current = current.parent
-      }
-      if (isUI) continue
-
-      // Добавляем объект в список рендеринга
-      if (object instanceof InstancedMesh) {
-        renderList.push({ type: "instanced-mesh", object, worldMatrix: object.matrixWorld })
-      } else if (object instanceof WireframeInstancedMesh) {
-        renderList.push({ type: "instanced-line", object, worldMatrix: object.matrixWorld })
-      } else if (object instanceof SkinnedMesh) {
-        renderList.push({ type: "skinned-mesh", object, worldMatrix: object.matrixWorld })
-      } else if (object instanceof Mesh) {
-        renderList.push({ type: "static-mesh", object, worldMatrix: object.matrixWorld })
-      } else if (object instanceof LineSegments) {
-        renderList.push({ type: "line", object, worldMatrix: object.matrixWorld })
-      } else if (object instanceof Text) {
-        renderList.push({ type: "text-stencil", object, worldMatrix: object.matrixWorld })
-        renderList.push({ type: "text-cover", object, worldMatrix: object.matrixWorld })
-      } else if (object instanceof Light) {
-        lights.push({ light: object, worldMatrix: object.matrixWorld })
-      }
-
-      // Добавляем дочерние объекты для обработки
-      for (const child of object.children) {
-        objectsToProcess.push(child)
-      }
-    }
-  }
 
   private updatePerObjectData(objects: RenderItem[]): void {
     if (!this.perObjectDataCPU) return
-    
-    // Сбрасываем данные
+
     this.perObjectDataCPU.fill(0)
-    
+
     for (let i = 0; i < objects.length; i++) {
       const item = objects[i]
+      if (!item) continue;
       const dynamicOffset = i * PER_OBJECT_DATA_SIZE
       const offsetFloats = dynamicOffset / 4
       

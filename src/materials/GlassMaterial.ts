@@ -6,7 +6,7 @@ export interface GlassMaterialParameters extends MaterialParameters {
 }
 
 export class GlassMaterial extends Material {
-    public readonly isGlassMaterial: boolean = true;
+    public readonly isGlassMaterial: true = true;
     public tintColor: Color;
 
     constructor(parameters: GlassMaterialParameters = {}) {
