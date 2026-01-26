@@ -39,12 +39,9 @@ export class YogaService {
     }
 
     this._state = YogaLoadingState.LOADING
-    console.log("YogaService: Starting WASM loading...")
 
     this.initializationPromise = (async () => {
       try {
-        console.log("YogaService: Dynamically importing yoga-layout browser build...")
-
         // @ts-ignore Прямой импорт ES модуля
         const yogaModule = await import("/yoga-wasm-base64-esm.js")
         const yogaExport = yogaModule.default || yogaModule
@@ -56,7 +53,6 @@ export class YogaService {
         }
 
         this._state = YogaLoadingState.READY
-        console.log("YogaService: WASM loaded successfully from ES module.")
         return this._yoga
       } catch (error) {
         this._state = YogaLoadingState.ERROR

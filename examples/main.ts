@@ -1,4 +1,3 @@
-console.log("📜 MAIN.TS: Module Evaluation Started");
 if (import.meta.hot) import.meta.hot.accept()
 
 import {
@@ -33,23 +32,17 @@ import { LayoutManager } from "../src/layout/LayoutManager"
 import { UIDisplay } from "../src/ui/UIDisplay"
 
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("🚀 Application Starting...");
-
   try {
-    console.log("📦 Initializing Yoga Layout...");
     await YogaService.instance.initialize();
-    console.log("✅ Yoga Layout Initialized");
   } catch (e) {
     console.error("⚠️ WARNING: Yoga failed to load. Layouts may not work.", e);
   }
 
-  console.log("🔧 Initializing Renderer...");
   const renderer = new Renderer()
   const canvas: HTMLCanvasElement = document.body.querySelector("#metafor")!
   
   try {
     await renderer.init(canvas)
-    console.log("✅ Renderer Initialized");
   } catch (err) {
     console.error("❌ FATAL: Renderer init failed", err);
     return;
@@ -158,15 +151,12 @@ document.addEventListener("DOMContentLoaded", async () => {
               width += metric.advanceWidth * scale + letterSpacing
           }
       } catch (e) {
-          console.warn('Text measurement failed, using heuristic', e)
-      }
+          }
       
       // Если расчет вернул 0 (ошибка метрик), используем эвристику для моноширинного шрифта
       if (width === 0) {
-          console.warn(`MeasureTextWidth: Calculated 0 width for '${text}', using heuristic.`);
           width = text.length * (fontSize * 0.6)
       }
-      console.log(`Text '${text}': width=${width}, fontSize=${fontSize}`);
       return width
   }
 
@@ -209,10 +199,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   display.addUI(createUIText("TASKS: 4 RUNNING", 32, 10))
 
   // --- Загрузка GLTF модели ---
-  console.log("📥 Loading GLTF Model...");
   const loader = new GLTFLoader()
   const gltf = await loader.load("./models/bots.glb")
-  console.log("✅ GLTF Model Loaded");
 
   gltf.scene.position.set(0, 0, 0)
   gltf.scene.rotation.z = Math.PI
@@ -335,14 +323,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   let torusPhase = Math.random() * Math.PI * 2
   let spherePhases = [Math.random() * Math.PI * 2, Math.random() * Math.PI * 2]
 
-  console.log("🎬 Starting Animation Loop");
   let lastTime = performance.now()
-  let frameCount = 0;
 
   function animate() {
     requestAnimationFrame(animate)
-    frameCount++;
-    if (frameCount % 100 === 0) console.log(`Stats: Frame ${frameCount}`);
 
     // Обновляем лейаут дисплея
     // Передаем корневой контейнер контента, размеры в ПИКСЕЛЯХ и масштаб (метры/пиксель)

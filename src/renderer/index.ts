@@ -95,32 +95,24 @@ export class Renderer {
    * @throws Error Если браузер не поддерживает WebGPU или не удалось получить адаптер.
    */
   public async init(canvas?: HTMLCanvasElement): Promise<void> {
-    console.log("⚙️ Renderer.init: Checking navigator.gpu");
     if (!navigator.gpu) throw new Error("WebGPU не поддерживается браузером.");
 
-    console.log("⚙️ Renderer.init: Requesting Adapter...");
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) throw new Error("Не удалось получить WebGPU адаптер.");
-    console.log("✅ Renderer.init: Adapter received:", adapter.info);
 
-    console.log("⚙️ Renderer.init: Requesting Device...");
     this.device = await adapter.requestDevice();
-    console.log("✅ Renderer.init: Device created");
 
     this.canvas = canvas || document.createElement("canvas");
     this.context = this.canvas.getContext("webgpu");
     if (!this.context) throw new Error("Не удалось получить WebGPU контекст.");
 
     this.presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-    console.log("⚙️ Renderer.init: Configuring Context with format:", this.presentationFormat);
     this.context.configure({
       device: this.device,
       format: this.presentationFormat,
     });
 
-    console.log("⚙️ Renderer.init: Setting up Pipelines...");
     await this.setupPipelines();
-    console.log("✅ Renderer.init: Pipelines setup complete");
   }
 
   private async setupPipelines(): Promise<void> {

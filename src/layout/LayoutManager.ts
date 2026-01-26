@@ -34,7 +34,6 @@ export class LayoutManager {
         
         if (!yogaNode) {
             if (!this.yoga.Node) {
-                console.error("LayoutManager: this.yoga.Node is undefined! Check initialization.");
                 return null;
             }
             
@@ -45,7 +44,6 @@ export class LayoutManager {
                     // Fallback for versions where Node is a constructor
                     yogaNode = new this.yoga.Node();
                 } catch (e) {
-                    console.error("LayoutManager: Failed to create Yoga Node. Node.create is not a function and new Node() failed.", e);
                     return null;
                 }
             }

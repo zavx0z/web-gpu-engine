@@ -62,7 +62,6 @@ export class AnimationAction {
     for (const track of this.clip.tracks) {
       const node = this.localRoot.getObjectByName(track.nodeName);
       if (!node) {
-        // console.warn(`Node with name ${track.nodeName} not found for animation track.`);
         continue;
       }
 
