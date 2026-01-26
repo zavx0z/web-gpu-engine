@@ -783,45 +783,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const commandEncoder = this.device.createCommandEncoder()
     const textureView = this.context.getCurrentTexture().createView()
 
-    // Временный вызов compute-пассов для тестирования
-    // TODO: Убрать после реализации многопроходного рендеринга
-    if (this.offscreenTexture && this.blurredIntermediateTexture && this.finalBlurredTexture) {
-      this.applyBlur(commandEncoder, this.offscreenTexture, this.blurredIntermediateTexture, true)
-      this.applyBlur(commandEncoder, this.blurredIntermediateTexture, this.finalBlurredTexture, false)
-    }
-    
-    const renderPassDescriptor: GPURenderPassDescriptor = {
-      colorAttachments: [
-        {
-          view: this.multisampleTexture!.createView(),
-          resolveTarget: textureView,
-          loadOp: "clear",
-          storeOp: "store",
-          clearValue: {
-            r: scene.background.r,
-            g: scene.background.g,
-            b: scene.background.b,
-            a: 1.0,
-          },
-        },
-      ],
-      depthStencilAttachment: {
-        view: this.depthTexture!.createView(),
-        depthClearValue: 1.0,
-        depthLoadOp: "clear",
-        depthStoreOp: "store",
-        stencilClearValue: 0,
-        stencilLoadOp: "clear",
-        stencilStoreOp: "store",
-      },
-    }
-
     const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
     this.device.queue.writeBuffer(this.globalUniformBuffer, 0, new Float32Array(vpMatrix.elements))
 
     this.frustum.setFromProjectionMatrix(vpMatrix)
 
-    // Объединяем все объекты для рендеринга (временно, до реализации многопроходного рендеринга)
+    // Объединяем все объекты для рендеринга
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
     collectSceneObjects(scene, renderList, lightList, this.frustum)
@@ -886,13 +853,84 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
     }
 
-    // --- Pass 2: Render ---
+    // --- Pass 2: Offscreen Render Pass (только обычные объекты) ---
+    if (regularObjects.length > 0 && this.offscreenTexture && this.offscreenDepthTexture) {
+      const offscreenPassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [{
+          view: this.offscreenTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: [0, 0, 0, 0] // Прозрачный фон
+        }],
+        depthStencilAttachment: {
+          view: this.offscreenDepthTexture.createView(),
+          depthClearValue: 1.0,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store'
+        }
+      }
+
+      const offscreenPassEncoder = commandEncoder.beginRenderPass(offscreenPassDescriptor)
+      offscreenPassEncoder.setBindGroup(0, this.globalBindGroup!)
+      this.renderObjectList(offscreenPassEncoder, regularObjects, renderList)
+      offscreenPassEncoder.end()
+    }
+
+    // --- Pass 3: Compute Blur Passes (только если есть стеклянные объекты) ---
+    if (glassObjects.length > 0 && this.offscreenTexture && this.blurredIntermediateTexture && this.finalBlurredTexture) {
+      this.applyBlur(commandEncoder, this.offscreenTexture, this.blurredIntermediateTexture, true)
+      this.applyBlur(commandEncoder, this.blurredIntermediateTexture, this.finalBlurredTexture, false)
+    }
+    
+    // --- Pass 4: Final Render Pass ---
+    const renderPassDescriptor: GPURenderPassDescriptor = {
+      colorAttachments: [
+        {
+          view: this.multisampleTexture!.createView(),
+          resolveTarget: textureView,
+          loadOp: "clear",
+          storeOp: "store",
+          clearValue: {
+            r: scene.background.r,
+            g: scene.background.g,
+            b: scene.background.b,
+            a: 1.0,
+          },
+        },
+      ],
+      depthStencilAttachment: {
+        view: this.depthTexture!.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+        stencilClearValue: 0,
+        stencilLoadOp: "clear",
+        stencilStoreOp: "store",
+      },
+    }
+
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
     passEncoder.setBindGroup(0, this.globalBindGroup!)
+    
+    // Рендерим все объекты (пока стеклянные объекты рендерятся как обычные)
+    this.renderObjectList(passEncoder, renderList, renderList)
+    
+    passEncoder.end()
+    this.device.queue.submit([commandEncoder.finish()])
+  }
+
+  private renderObjectList(
+    passEncoder: GPURenderPassEncoder,
+    objectsToRender: RenderItem[],
+    allObjects: RenderItem[]
+  ): void {
     let currentPipeline: GPURenderPipeline | null = null
 
-    for (let sortedIndex = 0; sortedIndex < renderList.length; sortedIndex++) {
-      const item = renderList[sortedIndex]
+    for (const item of objectsToRender) {
+      // Находим индекс этого объекта в общем списке для получения правильного renderIndex
+      const renderIndex = allObjects.indexOf(item)
+      if (renderIndex === -1) continue
+
       let pipeline: GPURenderPipeline | null = null
 
       // Определяем, какой конвейер нужен для текущего объекта
@@ -933,30 +971,27 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       switch (item.type) {
         case "static-mesh":
         case "skinned-mesh":
-          this.renderMesh(passEncoder, item.object as Mesh, item.worldMatrix, sortedIndex)
+          this.renderMesh(passEncoder, item.object as Mesh, item.worldMatrix, renderIndex)
           break
         case "instanced-mesh":
-          this.renderInstancedMesh(passEncoder, item.object as InstancedMesh, item.worldMatrix, sortedIndex)
+          this.renderInstancedMesh(passEncoder, item.object as InstancedMesh, item.worldMatrix, renderIndex)
           break
         case "instanced-line":
-          this.renderInstancedLines(passEncoder, item.object as WireframeInstancedMesh, item.worldMatrix, sortedIndex)
+          this.renderInstancedLines(passEncoder, item.object as WireframeInstancedMesh, item.worldMatrix, renderIndex)
           break
         case "line":
-          this.renderLines(passEncoder, item.object as LineSegments, item.worldMatrix, sortedIndex)
+          this.renderLines(passEncoder, item.object as LineSegments, item.worldMatrix, renderIndex)
           break
         case "text-stencil":
           passEncoder.setStencilReference(0)
-          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, sortedIndex, true)
+          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, renderIndex, true)
           break
         case "text-cover":
           passEncoder.setStencilReference(0)
-          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, sortedIndex, false)
+          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, renderIndex, false)
           break
       }
     }
-
-    passEncoder.end()
-    this.device.queue.submit([commandEncoder.finish()])
   }
 
   /**
