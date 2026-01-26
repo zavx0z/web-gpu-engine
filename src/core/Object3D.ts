@@ -133,4 +133,13 @@ export class Object3D {
   }
 
   public raycast(raycaster: Raycaster, intersects: Intersection[]): void {}
+
+  public findParentByType(type: any): Object3D | null {
+    let parent = this.parent;
+    while (parent) {
+      if (parent instanceof type) return parent;
+      parent = parent.parent;
+    }
+    return null;
+  }
 }

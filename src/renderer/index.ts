@@ -672,7 +672,34 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     })
   }
-  
+
+  private collectSceneObjectsByType(
+    scene: Scene, 
+    viewPoint: ViewPoint
+  ): { 
+    glassObjects: RenderItem[], 
+    regularObjects: RenderItem[], 
+    uiObjects: RenderItem[] 
+  } {
+    const vpMatrix = new Matrix4().multiplyMatrices(viewPoint.projectionMatrix, viewPoint.viewMatrix)
+    this.frustum.setFromProjectionMatrix(vpMatrix)
+
+    const renderList: RenderItem[] = []
+    const lightList: LightItem[] = []
+    collectSceneObjects(scene, renderList, lightList, this.frustum)
+
+    return {
+      glassObjects: renderList.filter(item => item.object.material?.isGlassMaterial === true),
+      regularObjects: renderList.filter(item => 
+        !item.object.material?.isGlassMaterial && 
+        !(item.object.isUIDisplay || (item.object as any).findParentByType?.((obj: any) => obj.isUIDisplay))
+      ),
+      uiObjects: renderList.filter(item => 
+        item.object.isUIDisplay || (item.object as any).findParentByType?.((obj: any) => obj.isUIDisplay)
+      )
+    }
+  }
+
   private applyBlur(
     commandEncoder: GPUCommandEncoder,
     inputTexture: GPUTexture,
@@ -740,6 +767,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     this.updateTextures()
     this.updateOffscreenTextures()
 
+    // Разделение объектов по типам для многопроходного рендеринга
+    const { glassObjects, regularObjects, uiObjects } = 
+      this.collectSceneObjectsByType(scene, viewPoint)
+
     const commandEncoder = this.device.createCommandEncoder()
     const textureView = this.context.getCurrentTexture().createView()
 
@@ -781,6 +812,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     this.frustum.setFromProjectionMatrix(vpMatrix)
 
+    // Объединяем все объекты для рендеринга (временно, до реализации многопроходного рендеринга)
     const renderList: RenderItem[] = []
     const lightList: LightItem[] = []
     collectSceneObjects(scene, renderList, lightList, this.frustum)
