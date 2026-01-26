@@ -7,7 +7,7 @@
         "**/Thumbs.db": true,
         "**/CVS": true,
         "**/*.crswap": true,
-        "**/node_modules": false,
+        "**/node_modules": true,
         "**/__pycache__": true,
         ".venv": true
     },
