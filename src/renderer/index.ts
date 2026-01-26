@@ -19,6 +19,7 @@ import meshStaticWGSL from "./shaders/mesh_static.wgsl" with { type: "text" };
 import meshSkinnedWGSL from "./shaders/mesh_skinned.wgsl" with { type: "text" };
 import meshInstancedWGSL from "./shaders/mesh_instanced.wgsl" with { type: "text" };
 import blurWGSL from "./shaders/blur.wgsl" with { type: "text" };
+import glassWGSL from "./shaders/glass.wgsl" with { type: "text" };
 
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" };
 
