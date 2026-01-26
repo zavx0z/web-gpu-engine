@@ -15,6 +15,8 @@ import { Vector3 } from "../math/Vector3"
 import { Text } from "../objects/Text"
 import { TextMaterial } from "../materials/TextMaterial"
 import { Frustum } from "../math/Frustum"
+import { Object3D } from "../core/Object3D"
+import { UIDisplay } from "../ui/UIDisplay"
 import meshStaticWGSL from "./shaders/mesh_static.wgsl" with { type: "text" };
 import meshSkinnedWGSL from "./shaders/mesh_skinned.wgsl" with { type: "text" };
 import meshInstancedWGSL from "./shaders/mesh_instanced.wgsl" with { type: "text" };
@@ -22,8 +24,8 @@ import blurWGSL from "./shaders/blur.wgsl" with { type: "text" };
 import glassWGSL from "./shaders/glass.wgsl" with { type: "text" };
 
 import lineShaderCode from "./shaders/line.wgsl" with { type: "text" };
-
 import textShaderCode from "./shaders/text.wgsl" with { type: "text" };
+import { Light } from "../lights/Light";
 import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
 
 // --- Константы для uniform-буферов ---
@@ -98,6 +100,7 @@ export class Renderer {
   
   // --- Offscreen текстуры для многопроходного рендеринга ---
   private offscreenTexture: GPUTexture | null = null
+  private offscreenResolvedTexture: GPUTexture | null = null
   private blurredIntermediateTexture: GPUTexture | null = null
   private finalBlurredTexture: GPUTexture | null = null
   private offscreenDepthTexture: GPUTexture | null = null
@@ -123,11 +126,13 @@ export class Renderer {
     this.context = this.canvas.getContext("webgpu");
     if (!this.context) throw new Error("Не удалось получить WebGPU контекст.");
 
-    this.presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    // Принудительно используем rgba8unorm для совместимости с compute-шейдерами и текстурами
+    // Принудительно используем rgba8unorm для совместимости с compute-шейдерами и текстурами
+    this.presentationFormat = 'rgba8unorm';
     this.context.configure({
       device: this.device,
       format: this.presentationFormat,
-      alphaMode: 'premultiplied', // Важно для прозрачности
+      alphaMode: 'premultiplied',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
 
@@ -627,7 +632,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const width = this.canvas.width
     const height = this.canvas.height
     
-    // Проверяем, изменился ли размер
     if (width === this.lastCanvasWidth && height === this.lastCanvasHeight) {
       return
     }
@@ -642,35 +646,50 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     
     // Освобождаем старые текстуры
     this.offscreenTexture?.destroy()
+    this.offscreenResolvedTexture?.destroy()
+    this.offscreenDepthTexture?.destroy()
     this.blurredIntermediateTexture?.destroy()
     this.finalBlurredTexture?.destroy()
-    this.offscreenDepthTexture?.destroy()
     
-    const textureDescriptor: GPUTextureDescriptor = {
-      size: [width, height],
-      format: this.presentationFormat,
-      usage: textureUsage,
-    }
-    
-    // Создаем текстуры для offscreen-рендеринга
+    // Мультисемплинговая текстура для offscreen-рендеринга
     this.offscreenTexture = this.device.createTexture({
-      ...textureDescriptor,
-      format: 'rgba8unorm'
+      size: [width, height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 4,
     })
-    this.blurredIntermediateTexture = this.device.createTexture({
-      ...textureDescriptor,
-      format: 'rgba8unorm'
-    })
-    this.finalBlurredTexture = this.device.createTexture({
-      ...textureDescriptor,
-      format: 'rgba8unorm'
+    
+    // Разрешенная (односэмпловая) текстура для compute-шейдеров
+    this.offscreenResolvedTexture = this.device.createTexture({
+      size: [width, height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | 
+             GPUTextureUsage.TEXTURE_BINDING | 
+             GPUTextureUsage.COPY_SRC,
     })
     
     // Текстура глубины для offscreen-пасса
     this.offscreenDepthTexture = this.device.createTexture({
       size: [width, height],
-      format: 'depth24plus',
+      format: 'depth24plus-stencil8',
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      sampleCount: 4,
+    })
+    
+    // Текстуры для размытия
+    this.blurredIntermediateTexture = this.device.createTexture({
+      size: [width, height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING |
+             GPUTextureUsage.STORAGE_BINDING |
+             GPUTextureUsage.COPY_SRC,
+    })
+    this.finalBlurredTexture = this.device.createTexture({
+      size: [width, height],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING |
+             GPUTextureUsage.STORAGE_BINDING |
+             GPUTextureUsage.COPY_SRC,
     })
   }
 
@@ -789,101 +808,54 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     this.frustum.setFromProjectionMatrix(vpMatrix)
 
-    // Объединяем все объекты для рендеринга
-    const renderList: RenderItem[] = []
-    const lightList: LightItem[] = []
-    collectSceneObjects(scene, renderList, lightList, this.frustum)
-
-    // Добавляем originalIndex для сохранения порядка при сортировке
-    renderList.forEach((item, index) => {
-      item.originalIndex = index
-    })
-
-    // --- Сортировка списка рендеринга для минимизации смены конвейера ---
-    const pipelineOrder: Record<string, number> = {
-      "static-mesh": 0,
-      "instanced-mesh": 1,
-      "skinned-mesh": 2,
-      "instanced-line": 3,
-      line: 4,
-      "text-stencil": 5,
-      "text-cover": 6,
-    }
-
-    // Сортируем renderList по pipelineOrder, а затем по originalIndex
-    renderList.sort((a, b) => {
-      const orderA = pipelineOrder[a.type] || 0
-      const orderB = pipelineOrder[b.type] || 0
-      if (orderA !== orderB) {
-        return orderA - orderB
-      }
-      return a.originalIndex! - b.originalIndex!
-    })
-
-    this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
-
-    // --- Pass 1: Update CPU Data ---
-    for (let sortedIndex = 0; sortedIndex < renderList.length; sortedIndex++) {
-      const item = renderList[sortedIndex]
-      switch (item.type) {
-        case "static-mesh":
-        case "skinned-mesh":
-          this.renderMesh(null, item.object as Mesh, item.worldMatrix, sortedIndex)
-          break
-        case "instanced-mesh":
-          this.renderInstancedMesh(null, item.object as InstancedMesh, item.worldMatrix, sortedIndex)
-          break
-        case "instanced-line":
-          this.renderInstancedLines(null, item.object as WireframeInstancedMesh, item.worldMatrix, sortedIndex)
-          break
-        case "line":
-          this.renderLines(null, item.object as LineSegments, item.worldMatrix, sortedIndex)
-          break
-        case "text-stencil":
-          this.renderTextPass(null, item.object as Text, item.worldMatrix, sortedIndex, true)
-          break
-        case "text-cover":
-          this.renderTextPass(null, item.object as Text, item.worldMatrix, sortedIndex, false)
-          break
-      }
-    }
-
-    // --- Upload Data ---
-    if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
-      const uploadData = this.perObjectDataCPU.buffer
-      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
-    }
-
-    // --- Pass 2: Offscreen Render Pass (только обычные объекты) ---
-    if (regularObjects.length > 0 && this.offscreenTexture && this.offscreenDepthTexture) {
+    // --- Pass 1: Рендеринг обычных объектов в offscreen-текстуру ---
+    if (regularObjects.length > 0 && this.offscreenTexture && this.offscreenResolvedTexture && this.offscreenDepthTexture) {
       const offscreenPassDescriptor: GPURenderPassDescriptor = {
         colorAttachments: [{
           view: this.offscreenTexture.createView(),
+          resolveTarget: this.offscreenResolvedTexture.createView(),
           loadOp: 'clear',
           storeOp: 'store',
-          clearValue: [0, 0, 0, 0] // Прозрачный фон
+          clearValue: [0, 0, 0, 0]
         }],
         depthStencilAttachment: {
           view: this.offscreenDepthTexture.createView(),
           depthClearValue: 1.0,
           depthLoadOp: 'clear',
-          depthStoreOp: 'store'
+          depthStoreOp: 'store',
+          stencilClearValue: 0,
+          stencilLoadOp: 'clear',
+          stencilStoreOp: 'store',
         }
       }
 
       const offscreenPassEncoder = commandEncoder.beginRenderPass(offscreenPassDescriptor)
       offscreenPassEncoder.setBindGroup(0, this.globalBindGroup!)
-      this.renderObjectList(offscreenPassEncoder, regularObjects, renderList)
+      
+      // Собираем и рендерим только обычные объекты
+      const regularRenderList: RenderItem[] = []
+      const lightList: LightItem[] = []
+      this.collectRegularObjects(scene, regularRenderList, lightList, this.frustum)
+      
+      this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
+      this.updatePerObjectData(regularRenderList)
+      
+      if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
+        const uploadData = this.perObjectDataCPU.buffer
+        this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
+      }
+      
+      this.renderObjectList(offscreenPassEncoder, regularRenderList, regularRenderList)
       offscreenPassEncoder.end()
     }
 
-    // --- Pass 3: Compute Blur Passes (только если есть стеклянные объекты) ---
-    if (glassObjects.length > 0 && this.offscreenTexture && this.blurredIntermediateTexture && this.finalBlurredTexture) {
-      this.applyBlur(commandEncoder, this.offscreenTexture, this.blurredIntermediateTexture, true)
+    // --- Pass 2: Compute Blur Passes (только если есть стеклянные объекты) ---
+    if (glassObjects.length > 0 && this.offscreenResolvedTexture && this.blurredIntermediateTexture && this.finalBlurredTexture) {
+      this.applyBlur(commandEncoder, this.offscreenResolvedTexture, this.blurredIntermediateTexture, true)
       this.applyBlur(commandEncoder, this.blurredIntermediateTexture, this.finalBlurredTexture, false)
     }
     
-    // --- Pass 4: Final Render Pass ---
+    // --- Pass 3: Финальный рендер пасс ---
     const renderPassDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [
         {
@@ -913,11 +885,181 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
     passEncoder.setBindGroup(0, this.globalBindGroup!)
     
-    // Рендерим все объекты (пока стеклянные объекты рендерятся как обычные)
-    this.renderObjectList(passEncoder, renderList, renderList)
+    // Собираем все объекты для финального рендеринга
+    const finalRenderList: RenderItem[] = []
+    const finalLightList: LightItem[] = []
+    collectSceneObjects(scene, finalRenderList, finalLightList, this.frustum)
+    
+    // Обновляем uniformы с учетом всех объектов
+    this.updateSceneUniforms(finalLightList, viewPoint.viewMatrix)
+    this.updatePerObjectData(finalRenderList)
+    
+    if (this.perObjectDataCPU && this.perObjectUniformBuffer) {
+      const uploadData = this.perObjectDataCPU.buffer
+      this.device.queue.writeBuffer(this.perObjectUniformBuffer, 0, uploadData, 0, this.perObjectDataCPU.length * 4)
+    }
+    
+    this.renderObjectList(passEncoder, finalRenderList, finalRenderList)
     
     passEncoder.end()
     this.device.queue.submit([commandEncoder.finish()])
+  }
+
+  private collectRegularObjects(
+    scene: Scene,
+    renderList: RenderItem[],
+    lights: LightItem[],
+    frustum: Frustum
+  ): void {
+    const objectsToProcess: Object3D[] = [scene]
+    
+    while (objectsToProcess.length > 0) {
+      const object = objectsToProcess.pop()!
+      if (!object.visible) continue
+
+      // Пропускаем стеклянные объекты
+      if (object instanceof Mesh) {
+        const material = Array.isArray(object.material) ? object.material[0] : object.material
+        if (material?.isGlassMaterial === true) continue
+      }
+
+      // Пропускаем UI дисплеи и их дочерние объекты
+      let isUI = false
+      let current: Object3D | null = object
+      while (current) {
+        if (current.isUIDisplay === true) {
+          isUI = true
+          break
+        }
+        current = current.parent
+      }
+      if (isUI) continue
+
+      // Добавляем объект в список рендеринга
+      if (object instanceof InstancedMesh) {
+        renderList.push({ type: "instanced-mesh", object, worldMatrix: object.matrixWorld })
+      } else if (object instanceof WireframeInstancedMesh) {
+        renderList.push({ type: "instanced-line", object, worldMatrix: object.matrixWorld })
+      } else if (object instanceof SkinnedMesh) {
+        renderList.push({ type: "skinned-mesh", object, worldMatrix: object.matrixWorld })
+      } else if (object instanceof Mesh) {
+        renderList.push({ type: "static-mesh", object, worldMatrix: object.matrixWorld })
+      } else if (object instanceof LineSegments) {
+        renderList.push({ type: "line", object, worldMatrix: object.matrixWorld })
+      } else if (object instanceof Text) {
+        renderList.push({ type: "text-stencil", object, worldMatrix: object.matrixWorld })
+        renderList.push({ type: "text-cover", object, worldMatrix: object.matrixWorld })
+      } else if (object instanceof Light) {
+        lights.push({ light: object, worldMatrix: object.matrixWorld })
+      }
+
+      // Добавляем дочерние объекты для обработки
+      for (const child of object.children) {
+        objectsToProcess.push(child)
+      }
+    }
+  }
+
+  private updatePerObjectData(objects: RenderItem[]): void {
+    if (!this.perObjectDataCPU) return
+    
+    // Сбрасываем данные
+    this.perObjectDataCPU.fill(0)
+    
+    for (let i = 0; i < objects.length; i++) {
+      const item = objects[i]
+      const dynamicOffset = i * PER_OBJECT_DATA_SIZE
+      const offsetFloats = dynamicOffset / 4
+      
+      switch (item.type) {
+        case "static-mesh":
+        case "skinned-mesh":
+          this.updateMeshData(item.object as Mesh, item.worldMatrix, offsetFloats)
+          break
+        case "instanced-mesh":
+          this.updateInstancedMeshData(item.object as InstancedMesh, item.worldMatrix, offsetFloats)
+          break
+        case "instanced-line":
+          this.updateInstancedLineData(item.object as WireframeInstancedMesh, item.worldMatrix, offsetFloats)
+          break
+        case "line":
+          this.updateLineData(item.object as LineSegments, item.worldMatrix, offsetFloats)
+          break
+        case "text-stencil":
+        case "text-cover":
+          this.updateTextData(item.object as Text, item.worldMatrix, offsetFloats, item.type === "text-stencil")
+          break
+      }
+    }
+  }
+
+  private updateMeshData(mesh: Mesh, worldMatrix: Matrix4, offsetFloats: number): void {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+    if (!material.visible) return
+
+    const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
+
+    this.perObjectDataCPU!.set(worldMatrix.elements, offsetFloats)
+    this.perObjectDataCPU!.set(normalMatrix.elements, offsetFloats + 16)
+
+    if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
+      this.perObjectDataCPU!.set([...material.color.toArray(), 1.0], offsetFloats + 32)
+    }
+  }
+
+  private updateInstancedMeshData(mesh: InstancedMesh, worldMatrix: Matrix4, offsetFloats: number): void {
+    const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+    if (!material.visible) return
+
+    const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
+
+    this.perObjectDataCPU!.set(worldMatrix.elements, offsetFloats)
+    this.perObjectDataCPU!.set(normalMatrix.elements, offsetFloats + 16)
+
+    if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
+      this.perObjectDataCPU!.set([...material.color.toArray(), 1.0], offsetFloats + 32)
+    }
+  }
+
+  private updateInstancedLineData(lines: WireframeInstancedMesh, worldMatrix: Matrix4, offsetFloats: number): void {
+    if (!lines.visible) return
+
+    this.perObjectDataCPU!.set(worldMatrix.elements, offsetFloats)
+    this.perObjectDataCPU!.set([0, 0, 0, 0], offsetFloats + 16)
+    this.perObjectDataCPU!.set([0, 0, 0, 0], offsetFloats + 20)
+    this.perObjectDataCPU!.set([0, 0, 0, 0], offsetFloats + 24)
+  }
+
+  private updateLineData(lines: LineSegments, worldMatrix: Matrix4, offsetFloats: number): void {
+    const material = lines.material
+    const isLineBasic = material instanceof LineBasicMaterial
+    const isLineGlow = material instanceof LineGlowMaterial
+
+    if (!(isLineBasic || isLineGlow) || !material.visible) return
+
+    this.perObjectDataCPU!.set(worldMatrix.elements, offsetFloats)
+    this.perObjectDataCPU!.set([...material.color.toArray(), material.opacity], offsetFloats + 16)
+
+    let glowIntensity = 1.0
+    let glowColor = new Float32Array([0, 0, 0, 0])
+
+    if (isLineGlow) {
+      glowIntensity = (material as LineGlowMaterial).glowIntensity
+      const glowColorObj = (material as LineGlowMaterial).glowColor
+      if (glowColorObj) {
+        glowColor = new Float32Array(glowColorObj.toArray())
+      }
+    }
+
+    this.perObjectDataCPU!.set([glowIntensity, 0, 0, 0], offsetFloats + 20)
+    this.perObjectDataCPU!.set(glowColor, offsetFloats + 24)
+  }
+
+  private updateTextData(text: Text, worldMatrix: Matrix4, offsetFloats: number, isStencil: boolean): void {
+    this.perObjectDataCPU!.set(worldMatrix.elements, offsetFloats)
+    if (!isStencil) {
+      this.perObjectDataCPU!.set([...(text.material as TextMaterial).color.toArray(), 1.0], offsetFloats + 32)
+    }
   }
 
   private renderObjectList(
