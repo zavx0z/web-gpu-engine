@@ -688,15 +688,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const lightList: LightItem[] = []
     collectSceneObjects(scene, renderList, lightList, this.frustum)
 
+    // Функция для проверки, является ли объект или любой из его родителей UIDisplay
+    const isUIDisplayOrChildOfUIDisplay = (obj: Object3D): boolean => {
+      if (obj.isUIDisplay) return true
+      let parent = obj.parent
+      while (parent) {
+        if (parent.isUIDisplay) return true
+        parent = parent.parent
+      }
+      return false
+    }
+
     return {
       glassObjects: renderList.filter(item => item.object.material?.isGlassMaterial === true),
       regularObjects: renderList.filter(item => 
         !item.object.material?.isGlassMaterial && 
-        !(item.object.isUIDisplay || (item.object as any).findParentByType?.((obj: any) => obj.isUIDisplay))
+        !isUIDisplayOrChildOfUIDisplay(item.object)
       ),
-      uiObjects: renderList.filter(item => 
-        item.object.isUIDisplay || (item.object as any).findParentByType?.((obj: any) => obj.isUIDisplay)
-      )
+      uiObjects: renderList.filter(item => isUIDisplayOrChildOfUIDisplay(item.object))
     }
   }
 
