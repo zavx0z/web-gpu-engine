@@ -68,7 +68,7 @@ export class Mesh extends Object3D {
 
     // 2. Трансформируем луч в локальное пространство объекта
     const inverseMatrix = new Matrix4().copy(matrixWorld).invert()
-    const localRay = new Ray().copy(raycaster.ray).applyMatrix4(inverseMatrix)
+    const localRay = new Ray(raycaster.ray.origin.clone(), raycaster.ray.direction.clone()).applyMatrix4(inverseMatrix)
 
     // 3. Перебор треугольников (для простоты пока только сферы)
     // TODO: Реализовать точное пересечение с треугольниками

@@ -15,7 +15,7 @@ export class BufferAttribute {
    * Прямая ссылка на типизированный массив данных.
    * Изменение значений здесь требует установки флага обновления (в будущих версиях).
    */
-  public needsUpdate: boolean = false
+  
   public array: TypedArray
 
   /**
