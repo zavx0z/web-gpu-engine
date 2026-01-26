@@ -630,9 +630,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const lightList: LightItem[] = []
     collectSceneObjects(scene, renderList, lightList, this.frustum)
 
-
-
-    this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
+    // Добавляем originalIndex для сохранения порядка при сортировке
+    renderList.forEach((item, index) => {
+      item.originalIndex = index
+    })
 
     // --- Сортировка списка рендеринга для минимизации смены конвейера ---
     const pipelineOrder: Record<string, number> = {
@@ -645,33 +646,40 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       "text-cover": 6,
     }
 
-    // Мы должны сохранить оригинальный индекс для правильного смещения в uniform-буфере
-    const indexedRenderList = renderList.map((item, index) => ({ item, originalIndex: index }))
-    indexedRenderList.sort((a, b) => {
-      return (pipelineOrder[a.item.type] || 0) - (pipelineOrder[b.item.type] || 0)
+    // Сортируем renderList по pipelineOrder, а затем по originalIndex
+    renderList.sort((a, b) => {
+      const orderA = pipelineOrder[a.type] || 0
+      const orderB = pipelineOrder[b.type] || 0
+      if (orderA !== orderB) {
+        return orderA - orderB
+      }
+      return a.originalIndex! - b.originalIndex!
     })
 
+    this.updateSceneUniforms(lightList, viewPoint.viewMatrix)
+
     // --- Pass 1: Update CPU Data ---
-    for (const { item, originalIndex } of indexedRenderList) {
+    for (let sortedIndex = 0; sortedIndex < renderList.length; sortedIndex++) {
+      const item = renderList[sortedIndex]
       switch (item.type) {
         case "static-mesh":
         case "skinned-mesh":
-          this.renderMesh(null, item.object as Mesh, item.worldMatrix, originalIndex)
+          this.renderMesh(null, item.object as Mesh, item.worldMatrix, sortedIndex)
           break
         case "instanced-mesh":
-          this.renderInstancedMesh(null, item.object as InstancedMesh, item.worldMatrix, originalIndex)
+          this.renderInstancedMesh(null, item.object as InstancedMesh, item.worldMatrix, sortedIndex)
           break
         case "instanced-line":
-          this.renderInstancedLines(null, item.object as WireframeInstancedMesh, item.worldMatrix, originalIndex)
+          this.renderInstancedLines(null, item.object as WireframeInstancedMesh, item.worldMatrix, sortedIndex)
           break
         case "line":
-          this.renderLines(null, item.object as LineSegments, item.worldMatrix, originalIndex)
+          this.renderLines(null, item.object as LineSegments, item.worldMatrix, sortedIndex)
           break
         case "text-stencil":
-          this.renderTextPass(null, item.object as Text, item.worldMatrix, originalIndex, true)
+          this.renderTextPass(null, item.object as Text, item.worldMatrix, sortedIndex, true)
           break
         case "text-cover":
-          this.renderTextPass(null, item.object as Text, item.worldMatrix, originalIndex, false)
+          this.renderTextPass(null, item.object as Text, item.worldMatrix, sortedIndex, false)
           break
       }
     }
@@ -687,7 +695,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     passEncoder.setBindGroup(0, this.globalBindGroup!)
     let currentPipeline: GPURenderPipeline | null = null
 
-    for (const { item, originalIndex } of indexedRenderList) {
+    for (let sortedIndex = 0; sortedIndex < renderList.length; sortedIndex++) {
+      const item = renderList[sortedIndex]
       let pipeline: GPURenderPipeline | null = null
 
       // Определяем, какой конвейер нужен для текущего объекта
@@ -728,24 +737,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       switch (item.type) {
         case "static-mesh":
         case "skinned-mesh":
-          this.renderMesh(passEncoder, item.object as Mesh, item.worldMatrix, originalIndex)
+          this.renderMesh(passEncoder, item.object as Mesh, item.worldMatrix, sortedIndex)
           break
         case "instanced-mesh":
-          this.renderInstancedMesh(passEncoder, item.object as InstancedMesh, item.worldMatrix, originalIndex)
+          this.renderInstancedMesh(passEncoder, item.object as InstancedMesh, item.worldMatrix, sortedIndex)
           break
         case "instanced-line":
-          this.renderInstancedLines(passEncoder, item.object as WireframeInstancedMesh, item.worldMatrix, originalIndex)
+          this.renderInstancedLines(passEncoder, item.object as WireframeInstancedMesh, item.worldMatrix, sortedIndex)
           break
         case "line":
-          this.renderLines(passEncoder, item.object as LineSegments, item.worldMatrix, originalIndex)
+          this.renderLines(passEncoder, item.object as LineSegments, item.worldMatrix, sortedIndex)
           break
         case "text-stencil":
           passEncoder.setStencilReference(0)
-          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, originalIndex, true)
+          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, sortedIndex, true)
           break
         case "text-cover":
           passEncoder.setStencilReference(0)
-          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, originalIndex, false)
+          this.renderTextPass(passEncoder, item.object as Text, item.worldMatrix, sortedIndex, false)
           break
       }
     }

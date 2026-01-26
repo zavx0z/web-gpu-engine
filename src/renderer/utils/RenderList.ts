@@ -17,6 +17,7 @@ export interface RenderItem {
   type: "static-mesh" | "skinned-mesh" | "instanced-mesh" | "instanced-line" | "line" | "text-stencil" | "text-cover"
   object: Mesh | InstancedMesh | SkinnedMesh | LineSegments | Text | WireframeInstancedMesh
   worldMatrix: Matrix4
+  originalIndex?: number // для сохранения порядка при сортировке
 }
 
 export interface LightItem {
