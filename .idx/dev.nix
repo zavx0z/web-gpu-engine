@@ -8,6 +8,9 @@
     "mhutchie.git-graph"
     "oven.bun-vscode"
   ];
+  idx.workspace.onCreate = {
+    install-deps = "bun install";
+  };
   idx.previews = {
     enable = true;
     previews = {
