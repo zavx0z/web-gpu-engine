@@ -23,6 +23,7 @@ import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
 
 import textShaderCode from "./shaders/text.wgsl" with { type: "text" }
 import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
+import { GlassMaterial } from "../materials/GlassMaterial"
 
 // --- Константы для uniform-буферов ---
 const UNIFORM_ALIGNMENT = 256
@@ -312,7 +313,21 @@ export class Renderer {
       fragment: {
         module: skinnedShaderModule,
         entryPoint: "fs_main",
-        targets: [{ format: this.presentationFormat }],
+        targets: [{
+          format: this.presentationFormat,
+          blend: {
+            color: {
+              srcFactor: "src-alpha",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            },
+            alpha: {
+              srcFactor: "one",
+              dstFactor: "one-minus-src-alpha",
+              operation: "add"
+            }
+          }
+        }],
       },
       primitive: { topology: "triangle-list", cullMode: "none" },
       depthStencil: {
@@ -982,6 +997,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
       this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 32)
+    } else if (material instanceof GlassMaterial) {
+      this.perObjectDataCPU.set(material.tintColor.toArray(), offsetFloats + 32)
     }
 
     const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0

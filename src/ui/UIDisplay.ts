@@ -22,6 +22,7 @@ export interface UIDisplayParameters {
  * Конвертирует пиксельную верстку (Yoga) в физические размеры мира (Метры).
  */
 export class UIDisplay extends Object3D {
+  public readonly isUIDisplay: true = true
   public physicalWidth: number
   public physicalHeight: number
   public pixelWidth: number
