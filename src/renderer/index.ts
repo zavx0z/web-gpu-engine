@@ -27,6 +27,7 @@ import lineShaderCode from "./shaders/line.wgsl" with { type: "text" };
 import textShaderCode from "./shaders/text.wgsl" with { type: "text" };
 import { Light } from "../lights/Light";
 import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
+import { GlassMaterial } from "../materials/GlassMaterial";
 
 // --- Константы для uniform-буферов ---
 const UNIFORM_ALIGNMENT = 256
@@ -886,10 +887,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
     passEncoder.setBindGroup(0, this.globalBindGroup!)
     
-    // In a correct implementation, we would composite the offscreen texture.
-    // For now, to fix the bug, we re-render all objects, which should now work
-    // because the uniform buffer is correct.
-    this.renderObjectList(passEncoder, allRenderItems, allRenderItems)
+    // Рендерим обычные объекты
+    this.renderObjectList(passEncoder, regularObjects, allRenderItems);
+    // Рендерим стеклянные объекты (пока как обычные, но с прозрачностью)
+    this.renderObjectList(passEncoder, glassObjects, allRenderItems);
+    // Рендерим UI объекты
+    this.renderObjectList(passEncoder, uiObjects, allRenderItems);
     
     passEncoder.end()
     this.device.queue.submit([commandEncoder.finish()])
@@ -909,8 +912,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       
       switch (item.type) {
         case "static-mesh":
-        case "skinned-mesh":
           this.updateMeshData(item.object as Mesh, item.worldMatrix, offsetFloats)
+          break
+        case "skinned-mesh":
+          this.updateSkinnedMeshData(item.object as SkinnedMesh, item.worldMatrix, offsetFloats)
           break
         case "instanced-mesh":
           this.updateInstancedMeshData(item.object as InstancedMesh, item.worldMatrix, offsetFloats)
@@ -929,6 +934,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
   }
 
+  private updateSkinnedMeshData(mesh: SkinnedMesh, worldMatrix: Matrix4, offsetFloats: number): void {
+    this.updateMeshData(mesh, worldMatrix, offsetFloats);
+    const dynamicOffset = offsetFloats * 4;
+    const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE;
+    this.perObjectDataCPU!.set(mesh.skeleton.boneMatrices, boneMatricesOffset / 4);
+  }
+
   private updateMeshData(mesh: Mesh, worldMatrix: Matrix4, offsetFloats: number): void {
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
     if (!material.visible) return
@@ -939,7 +951,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     this.perObjectDataCPU!.set(normalMatrix.elements, offsetFloats + 16)
 
     if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
-      this.perObjectDataCPU!.set([...material.color.toArray(), 1.0], offsetFloats + 32)
+      this.perObjectDataCPU!.set(material.color.toArray(), offsetFloats + 32)
+    } else if (material instanceof GlassMaterial) {
+      this.perObjectDataCPU!.set(material.tintColor.toArray(), offsetFloats + 32)
     }
   }
 
@@ -1278,34 +1292,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     worldMatrix: Matrix4,
     renderIndex: number,
   ): void {
-    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup || !this.perObjectDataCPU) return
+    if (!this.device || !this.perObjectUniformBuffer || !this.perObjectBindGroup) return
     const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
     if (!material.visible) return
 
+    const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh;
     const dynamicOffset = renderIndex * PER_OBJECT_DATA_SIZE
-    const offsetFloats = dynamicOffset / 4
-
-    const normalMatrix = new Matrix4().copy(worldMatrix).invert().transpose()
-
-    this.perObjectDataCPU.set(worldMatrix.elements, offsetFloats) // modelMatrix
-    this.perObjectDataCPU.set(normalMatrix.elements, offsetFloats + 16) // normalMatrix
-
-    if (material instanceof MeshBasicMaterial || material instanceof MeshLambertMaterial) {
-      this.perObjectDataCPU.set([...material.color.toArray(), 1.0], offsetFloats + 32)
-    }
-
-    const isSkinned = (mesh as SkinnedMesh).isSkinnedMesh ? 1 : 0
-
     const boneMatricesOffset = dynamicOffset + PER_OBJECT_UNIFORM_SIZE
-
-    if (isSkinned) {
-      const skeleton = (mesh as SkinnedMesh).skeleton
-      this.perObjectDataCPU.set(skeleton.boneMatrices, boneMatricesOffset / 4)
-    }
 
     if (passEncoder) {
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
-
       const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } =
         this.getOrCreateGeometryBuffers(mesh.geometry)
 
@@ -1313,6 +1309,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       if (normalBuffer) {
         passEncoder.setVertexBuffer(1, normalBuffer)
       }
+
       if (isSkinned && skinIndexBuffer && skinWeightBuffer) {
         passEncoder.setVertexBuffer(2, skinIndexBuffer)
         passEncoder.setVertexBuffer(3, skinWeightBuffer)
