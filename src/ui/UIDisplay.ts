@@ -5,9 +5,7 @@ import { MeshBasicMaterial } from "../materials/MeshBasicMaterial"
 import { LineSegments } from "../objects/LineSegments"
 import { LineBasicMaterial } from "../materials/LineBasicMaterial"
 import { BufferGeometry, BufferAttribute } from "../core/BufferGeometry"
-import { Line } from "../objects/Line"
 import { Color } from "../math/Color"
-import { LayoutProps } from "../layout/LayoutTypes"
 
 export interface UIDisplayParameters {
   width: number // Физическая ширина в метрах
@@ -41,15 +39,15 @@ export class UIDisplay extends Object3D {
     this.pixelScale = this.physicalWidth / this.pixelWidth
 
     // 1. Создаем физическую подложку (Корпус/Экран)
-    const bgGeometry = new PlaneGeometry({ 
-        width: this.physicalWidth, 
-        height: this.physicalHeight 
+    const bgGeometry = new PlaneGeometry({
+      width: this.physicalWidth,
+      height: this.physicalHeight,
     })
-    const bgMaterial = new MeshBasicMaterial({ 
-        color: params.background ?? 0x111111 
+    const bgMaterial = new MeshBasicMaterial({
+      color: params.background ?? 0x111111,
     })
     const backgroundMesh = new Mesh(bgGeometry, bgMaterial)
-    
+
     // PlaneGeometry создается в XY, для Z-up сцены вертикальный экран должен стоять перпендикулярно Y
     // Но обычно UI рисуется в локальных XY, а сам объект вращается.
     // Оставим геометрию как есть (XY), а контейнер повернем при размещении в сцене.
@@ -57,24 +55,20 @@ export class UIDisplay extends Object3D {
 
     // 2. Контейнер для контента (Flexbox root)
     this.contentContainer = new Object3D()
-    
+
     // Настройка Yoga Layout для корневого элемента (весь экран)
     this.contentContainer.layout = {
       width: this.pixelWidth,
       height: this.pixelHeight,
-      flexDirection: 'column',
+      flexDirection: "column",
       // По умолчанию контент начинается сверху
-      justifyContent: 'flex-start',
-      alignItems: 'center',
-      padding: 20 // Отступ от краев экрана в пикселях
+      justifyContent: "flex-start",
+      alignItems: "center",
+      padding: 20, // Отступ от краев экрана в пикселях
     }
 
     // Смещаем контент: (0,0) слоя верстки должен совпадать с верхним левым углом дисплея (-W/2, H/2)
-    this.contentContainer.position.set(
-        -this.physicalWidth / 2,
-        this.physicalHeight / 2,
-        0.005
-    )
+    this.contentContainer.position.set(-this.physicalWidth / 2, this.physicalHeight / 2, 0.005)
     this.contentContainer.updateMatrix()
 
     this.add(this.contentContainer)
@@ -85,14 +79,9 @@ export class UIDisplay extends Object3D {
     const w = this.physicalWidth / 2
     const h = this.physicalHeight / 2
     // Контур прямоугольника
-    const vertices = new Float32Array([
-        -w, h, 0,   w, h, 0,
-        w, h, 0,    w, -h, 0,
-        w, -h, 0,   -w, -h, 0,
-        -w, -h, 0,  -w, h, 0
-    ])
+    const vertices = new Float32Array([-w, h, 0, w, h, 0, w, h, 0, w, -h, 0, w, -h, 0, -w, -h, 0, -w, -h, 0, -w, h, 0])
     const borderGeo = new BufferGeometry()
-    borderGeo.setAttribute('position', new BufferAttribute(vertices, 3))
+    borderGeo.setAttribute("position", new BufferAttribute(vertices, 3))
     // Vision Pro Style: Border Surface-400 (rgb(116, 130, 151) -> 0x748297)
     const borderMat = new LineBasicMaterial({ color: 0x748297 })
     const border = new LineSegments(borderGeo, borderMat)
