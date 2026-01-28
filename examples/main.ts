@@ -200,6 +200,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- Загрузка GLTF модели ---
   const loader = new GLTFLoader()
+  // const gltf = await loader.load("./models/DamagedHelmet.gltf")
   const gltf = await loader.load("./models/bots.glb")
 
   gltf.scene.position.set(0, 0, 0)

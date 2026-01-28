@@ -18,6 +18,13 @@ Bun.serve({
     "/models/engine.gltf": file("./static/engine.gltf"),
     "/models/engine.bin": file("./static/engine.bin"),
     "/models/engine.glb": file("./static/engine.glb"),
+
+    "/models/BrainStem.gltf": file("./media/BrainStem/BrainStem.gltf"),
+    "/models/BrainStem0.bin": file("./media/BrainStem/BrainStem0.bin"),
+
+    "/models/DamagedHelmet.gltf": file("./media/DamagedHelmet/DamagedHelmet.gltf"),
+    "/models/DamagedHelmet.bin": file("./media/DamagedHelmet/DamagedHelmet.bin"),
+
     "/yoga-wasm-base64-esm.js": file("./node_modules/yoga-layout/dist/binaries/yoga-wasm-base64-esm.js"),
   },
 })
