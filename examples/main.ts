@@ -67,7 +67,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const viewPoint = new ViewPoint({
     element: renderer.canvas,
     fov: (2 * Math.PI) / 5,
-    position: { x: 2, y: -1.5, z: 1.5 },
+    position: { x: 2, y: -1.5, z: 5 },
     target: { x: 0, y: 0, z: 1 },
     near: 0.1,
     far: 100,
@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   })
 
   const light = new Light(new Color(1, 1, 1), 1)
-  light.position.set(4, -4, 4)
+  light.position.set(-14, -14, -100)
   light.updateMatrix()
   scene.add(light)
 
@@ -200,8 +200,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- Загрузка GLTF модели ---
   const loader = new GLTFLoader()
-  // const gltf = await loader.load("./models/DamagedHelmet.gltf")
-  const gltf = await loader.load("./models/bots.glb")
+  const gltf = await loader.load("./models/pent.glb")
 
   gltf.scene.position.set(0, 0, 0)
   gltf.scene.rotation.z = Math.PI

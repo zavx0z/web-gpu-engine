@@ -457,17 +457,37 @@ export class GLTFLoader {
     return geometry
   }
 
-  private getAccessorData(gltf: GLTF, accessor: GLTFAccessor, buffers: ArrayBuffer[]): TypedArray {
-    const bufferView = gltf.bufferViews![accessor.bufferView!]
-    const buffer = buffers[bufferView.buffer]
-    const componentType = accessor.componentType
-    const TypedArray = this.getTypedArray(componentType)
-    const itemSize = this.getItemSize(accessor.type)
-    const byteOffset = (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
-    const elementCount = accessor.count * itemSize
-
-    return new TypedArray(buffer, byteOffset, elementCount)
-  }
+private getAccessorData(gltf: GLTF, accessor: GLTFAccessor, buffers: ArrayBuffer[]): TypedArray {
+        const bufferView = gltf.bufferViews![accessor.bufferView!]
+        const buffer = buffers[bufferView.buffer]
+        const componentType = accessor.componentType
+        const TypedArray = this.getTypedArray(componentType)
+        const itemSize = this.getItemSize(accessor.type)
+        const byteOffset = (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
+        const elementCount = accessor.count * itemSize
+        const bytesPerElement = TypedArray.BYTES_PER_ELEMENT
+        // Check if byteOffset is properly aligned for this TypedArray type
+        if (byteOffset % bytesPerElement === 0) {
+            return new TypedArray(buffer, byteOffset, elementCount)
+        }
+        // Fallback for unaligned offsets: copy data via DataView
+        const dataView = new DataView(buffer, byteOffset, elementCount * bytesPerElement)
+        const result = new TypedArray(elementCount)
+        switch (bytesPerElement) {
+            case 1:
+                for (let i = 0; i < elementCount; i++) (result as any)[i] = dataView.getUint8(i)
+                break
+            case 2:
+                for (let i = 0; i < elementCount; i++) (result as any)[i] = dataView.getUint16(i * 2, true)
+                break
+            case 4:
+                for (let i = 0; i < elementCount; i++) (result as any)[i] = dataView.getFloat32(i * 4, true)
+                break
+            default:
+                throw new Error(`Unsupported BYTES_PER_ELEMENT: ${bytesPerElement}`)
+        }
+        return result
+    }
 
   private getTypedArray(componentType: number): any {
     switch (componentType) {

@@ -18,6 +18,8 @@ Bun.serve({
     "/models/engine.gltf": file("./static/engine.gltf"),
     "/models/engine.bin": file("./static/engine.bin"),
     "/models/engine.glb": file("./static/engine.glb"),
+    "/models/pent.glb": file("./static/models/pent.glb"),
+    
 
     "/models/BrainStem.gltf": file("./media/BrainStem/BrainStem.gltf"),
     "/models/BrainStem0.bin": file("./media/BrainStem/BrainStem0.bin"),
@@ -29,4 +31,4 @@ Bun.serve({
   },
 })
 
-console.log(`Bun server running at http://0.0.0.0:${process.env.PORT || 3000}`)
+console.log(`Bun server running at http://localhost:${process.env.PORT || 3000}`)
