@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   })
 
   const light = new Light(new Color(1, 1, 1), 1)
-  light.position.set(1, 1, 2)
+  light.position.set(0, 0, 1)
   light.updateMatrix()
   scene.add(light)
 

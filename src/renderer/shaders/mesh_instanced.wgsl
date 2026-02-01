@@ -92,7 +92,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     for (var i: u32 = 0u; i < sceneUniforms.numLights; i = i + 1u) {
         let light = sceneUniforms.lights[i];
-        let lightDir = normalize(in.viewPosition - light.position.xyz);
+        let lightDir = normalize(light.position.xyz - in.viewPosition);
         let diffuseStrength = max(dot(normal, lightDir), 0.0);
         let intensity = light.color.a;
         totalDiffuse = totalDiffuse + light.color.rgb * diffuseStrength * intensity;
