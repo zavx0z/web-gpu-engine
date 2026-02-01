@@ -24,17 +24,21 @@ struct PerObjectUniforms {
     color: vec4<f32>,
 };
 @binding(0) @group(1) var<uniform> perObject: PerObjectUniforms;
+@binding(0) @group(2) var t_diffuse: texture_2d<f32>;
+@binding(1) @group(2) var s_diffuse: sampler;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) viewPosition: vec3<f32>,
     @location(1) viewNormal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
 };
 
 @vertex
 fn vs_main(
     @location(0) pos: vec3<f32>,
-    @location(1) normal: vec3<f32>
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>
 ) -> VertexOutput {
     var out: VertexOutput;
     var worldPosition: vec4<f32>;
@@ -46,6 +50,7 @@ fn vs_main(
     out.position = globalUniforms.viewProjectionMatrix * worldPosition;
     out.viewPosition = (sceneUniforms.viewMatrix * worldPosition).xyz;
     out.viewNormal = (sceneUniforms.viewNormalMatrix * vec4<f32>(worldNormal, 0.0)).xyz;
+    out.uv = uv;
     return out;
 }
 
@@ -63,6 +68,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         totalDiffuse = totalDiffuse + light.color.rgb * diffuseStrength * intensity;
     }
 
-    let finalColor = perObject.color.rgb * (ambient + totalDiffuse);
-    return vec4<f32>(finalColor, perObject.color.a);
+    let texColor = textureSample(t_diffuse, s_diffuse, in.uv);
+    let finalColor = perObject.color.rgb * texColor.rgb * (ambient + totalDiffuse);
+    return vec4<f32>(finalColor, perObject.color.a * texColor.a);
 }

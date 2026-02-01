@@ -23,6 +23,7 @@ import lineShaderCode from "./shaders/line.wgsl" with { type: "text" }
 
 import textShaderCode from "./shaders/text.wgsl" with { type: "text" }
 import { collectSceneObjects, LightItem, RenderItem } from "./utils/RenderList"
+import { Texture } from "../core/Texture"
 
 // --- Константы для uniform-буферов ---
 const UNIFORM_ALIGNMENT = 256
@@ -43,12 +44,13 @@ const LIGHT_STRUCT_SIZE = 32
 interface GeometryBuffers {
   positionBuffer: GPUBuffer
   normalBuffer?: GPUBuffer
+  uvBuffer?: GPUBuffer
   indexBuffer?: GPUBuffer
   colorBuffer?: GPUBuffer
   skinIndexBuffer?: GPUBuffer
   skinWeightBuffer?: GPUBuffer
-  instanceMatrixBuffer?: GPUBuffer // для инстансированных мешей
-  instanceBuffer?: GPUBuffer // для WireframeInstancedMesh (матрица + параметры материала)
+  instanceMatrixBuffer?: GPUBuffer
+  instanceBuffer?: GPUBuffer
 }
 
 /**
@@ -75,6 +77,12 @@ export class Renderer {
   private globalUniformBuffer: GPUBuffer | null = null
   private sceneUniformBuffer: GPUBuffer | null = null // Для освещения
   private globalBindGroup: GPUBindGroup | null = null
+
+  private materialBindGroupLayout: GPUBindGroupLayout | null = null
+  private defaultTexture: GPUTexture | null = null
+  private defaultSampler: GPUSampler | null = null
+  private defaultMaterialBindGroup: GPUBindGroup | null = null
+  private materialBindGroups: WeakMap<Texture, GPUBindGroup> = new WeakMap()
 
   // --- Ресурсы для каждого объекта ---
   private perObjectUniformBuffer: GPUBuffer | null = null
@@ -111,8 +119,31 @@ export class Renderer {
       device: this.device,
       format: this.presentationFormat,
     });
-
+    this.createDefaultTexture();
     await this.setupPipelines();
+  }
+
+  private createDefaultTexture(): void {
+    if (!this.device) return;
+    this.defaultTexture = this.device.createTexture({
+      size: [1, 1],
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    // Белый пиксель
+    this.device.queue.writeTexture(
+      { texture: this.defaultTexture },
+      new Uint8Array([255, 255, 255, 255]),
+      { bytesPerRow: 4, rowsPerImage: 1 },
+      { width: 1, height: 1 }
+    );
+    this.defaultSampler = this.device.createSampler({
+      magFilter: "linear",
+      minFilter: "linear",
+      mipmapFilter: "linear",
+      addressModeU: "repeat",
+      addressModeV: "repeat",
+    });
   }
 
   private async setupPipelines(): Promise<void> {
@@ -172,6 +203,29 @@ export class Renderer {
       ],
     })
 
+    this.materialBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { viewDimension: "2d" },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: {},
+        },
+      ],
+    })
+
+    this.defaultMaterialBindGroup = this.device.createBindGroup({
+      layout: this.materialBindGroupLayout,
+      entries: [
+        { binding: 0, resource: this.defaultTexture!.createView() },
+        { binding: 1, resource: this.defaultSampler! },
+      ],
+    })
+
     this.perObjectBindGroup = this.device.createBindGroup({
       layout: perObjectBindGroupLayout,
       entries: [
@@ -193,7 +247,7 @@ export class Renderer {
     })
 
     const pipelineLayout = this.device.createPipelineLayout({
-      bindGroupLayouts: [globalBindGroupLayout, perObjectBindGroupLayout],
+      bindGroupLayouts: [globalBindGroupLayout, perObjectBindGroupLayout, this.materialBindGroupLayout!],
     })
 
     // --- Shader Modules ---
@@ -224,6 +278,8 @@ export class Renderer {
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
           // normal
           { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+          // uv
+          { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: "float32x2" }] },
         ],
       },
       fragment: {
@@ -245,7 +301,7 @@ export class Renderer {
           },
         }],
       },
-      primitive: { topology: "triangle-list", cullMode: "none" },
+      primitive: { topology: "triangle-list", cullMode: "back" },
       depthStencil: {
         depthWriteEnabled: true,
         depthCompare: "less",
@@ -303,10 +359,12 @@ export class Renderer {
           { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x3" }] },
           // normal
           { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: "float32x3" }] },
+          // uv
+          { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: "float32x2" }] },
           // skinIndex
-          { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: "uint16x4" }] },
+          { arrayStride: 8, attributes: [{ shaderLocation: 3, offset: 0, format: "uint16x4" }] },
           // skinWeight
-          { arrayStride: 16, attributes: [{ shaderLocation: 3, offset: 0, format: "float32x4" }] },
+          { arrayStride: 16, attributes: [{ shaderLocation: 4, offset: 0, format: "float32x4" }] },
         ],
       },
       fragment: {
@@ -852,7 +910,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     new Float32Array(positionBuffer.getMappedRange()).set(geometry.attributes.position.array)
     positionBuffer.unmap()
 
-    let normalBuffer: GPUBuffer | undefined
+      let normalBuffer: GPUBuffer | undefined
     if (geometry.attributes.normal) {
       normalBuffer = this.device.createBuffer({
         size: (geometry.attributes.normal.array.byteLength + 3) & ~3,
@@ -861,6 +919,24 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       })
       new Float32Array(normalBuffer.getMappedRange()).set(geometry.attributes.normal.array)
       normalBuffer.unmap()
+    }
+
+    let uvBuffer: GPUBuffer | undefined
+    if (geometry.attributes.uv) {
+      uvBuffer = this.device.createBuffer({
+        size: (geometry.attributes.uv.array.byteLength + 3) & ~3,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      })
+      new Float32Array(uvBuffer.getMappedRange()).set(geometry.attributes.uv.array)
+      uvBuffer.unmap()
+    } else {
+       // Заглушка для UV
+       const uvSize = geometry.attributes.position.count * 2 * 4;
+       uvBuffer = this.device.createBuffer({
+         size: (uvSize + 3) & ~3,
+         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+       });
     }
 
     let skinIndexBuffer: GPUBuffer | undefined
@@ -952,14 +1028,51 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
       normalBuffer,
       colorBuffer,
       indexBuffer,
+      uvBuffer,
       skinIndexBuffer,
       skinWeightBuffer,
       instanceMatrixBuffer,
       instanceBuffer,
     }
-
     this.geometryCache.set(geometry, buffers)
     return buffers
+  }
+
+  private getMaterialBindGroup(material: any): GPUBindGroup {
+    if (material.map && material.map.isTexture) {
+      const texture = material.map as Texture
+      if (texture.needsUpdate && texture.image) {
+        if (!texture.gpuTexture) {
+             texture.gpuTexture = this.device!.createTexture({
+                size: [texture.image.width, texture.image.height],
+                format: 'rgba8unorm',
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+             });
+        }
+        this.device!.queue.copyExternalImageToTexture(
+            { source: texture.image },
+            { texture: texture.gpuTexture },
+            [texture.image.width, texture.image.height]
+        );
+        texture.needsUpdate = false;
+      }
+      
+      if (texture.gpuTexture) {
+        let bindGroup = this.materialBindGroups.get(texture);
+        if (!bindGroup) {
+           bindGroup = this.device!.createBindGroup({
+               layout: this.materialBindGroupLayout!,
+               entries: [
+                   { binding: 0, resource: texture.gpuTexture.createView() },
+                   { binding: 1, resource: this.defaultSampler! }
+               ]
+           });
+           this.materialBindGroups.set(texture, bindGroup);
+        }
+        return bindGroup;
+      }
+    }
+    return this.defaultMaterialBindGroup!;
   }
 
   private renderMesh(
@@ -995,17 +1108,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if (passEncoder) {
       passEncoder.setBindGroup(1, this.perObjectBindGroup, [dynamicOffset, boneMatricesOffset])
+      passEncoder.setBindGroup(2, this.getMaterialBindGroup(material))
 
-      const { positionBuffer, normalBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } =
+      const { positionBuffer, normalBuffer, uvBuffer, indexBuffer, skinIndexBuffer, skinWeightBuffer } =
         this.getOrCreateGeometryBuffers(mesh.geometry)
-
       passEncoder.setVertexBuffer(0, positionBuffer)
       if (normalBuffer) {
         passEncoder.setVertexBuffer(1, normalBuffer)
       }
+      if (uvBuffer) {
+        passEncoder.setVertexBuffer(2, uvBuffer)
+      }
       if (isSkinned && skinIndexBuffer && skinWeightBuffer) {
-        passEncoder.setVertexBuffer(2, skinIndexBuffer)
-        passEncoder.setVertexBuffer(3, skinWeightBuffer)
+        passEncoder.setVertexBuffer(3, skinIndexBuffer)
+        passEncoder.setVertexBuffer(4, skinWeightBuffer)
       }
 
       if (indexBuffer) {

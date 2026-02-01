@@ -1,5 +1,6 @@
 import { Color } from "../math/Color"
 import { Material, MaterialParameters } from "./Material"
+import { Texture } from "../core/Texture"
 
 /**
  * Параметры для создания {@link MeshLambertMaterial}.
@@ -10,6 +11,7 @@ export interface MeshLambertMaterialParameters extends MaterialParameters {
    * @default new Color(0xffffff) // белый
    */
   color?: number | Color
+  map?: Texture
 }
 
 /**
@@ -19,13 +21,14 @@ export interface MeshLambertMaterialParameters extends MaterialParameters {
 export class MeshLambertMaterial extends Material {
   /** @default new Color(0xffffff) // белый */
   public color: Color
+  public map: Texture | null
 
   /**
    * @param parameters - Параметры материала.
    */
   constructor(parameters: MeshLambertMaterialParameters = {}) {
     super(parameters)
-
     this.color = new Color(parameters.color ?? 0xffffff)
+    this.map = parameters.map ?? null
   }
 }

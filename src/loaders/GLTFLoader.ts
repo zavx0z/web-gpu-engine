@@ -11,6 +11,7 @@ import { Matrix4 } from "../math/Matrix4"
 import { AnimationClip } from "../animation/AnimationClip"
 import { KeyframeTrack } from "../animation/KeyframeTrack"
 import { Quaternion } from "../math/Quaternion"
+import { Texture } from "../core/Texture"
 
 // --- GLTF Constants ---
 const GLB_MAGIC = 0x46546c67 // "glTF" в ASCII
@@ -29,6 +30,19 @@ interface GLTF {
   materials?: GLTFMaterial[]
   skins?: GLTFSkin[]
   animations?: GLTFAnimation[]
+  images?: GLTFImage[]
+  textures?: GLTFTexture[]
+}
+
+interface GLTFImage {
+  uri?: string
+  bufferView?: number
+  mimeType?: string
+}
+
+interface GLTFTexture {
+  sampler?: number
+  source?: number
 }
 
 interface GLTFScene {
@@ -84,6 +98,7 @@ interface GLTFMaterial {
   name?: string
   pbrMetallicRoughness?: {
     baseColorFactor?: [number, number, number, number]
+    baseColorTexture?: { index: number }
   }
 }
 
@@ -150,7 +165,10 @@ export class GLTFLoader {
       buffers = await this.loadExternalBuffers(gltf, baseUri)
     }
 
-    const materials = this.parseMaterials(gltf)
+    const baseUri = url.substring(0, url.lastIndexOf('/') + 1)
+    const images = await this.parseImages(gltf, buffers, baseUri)
+    const textures = this.parseTextures(gltf, images)
+    const materials = this.parseMaterials(gltf, textures)
     const animations = this.parseAnimations(gltf, buffers)
 
     const scene = new Scene()
@@ -247,19 +265,72 @@ export class GLTFLoader {
     return Promise.all(promises)
   }
 
-  private parseMaterials(gltf: GLTF): MeshLambertMaterial[] {
+  private parseMaterials(gltf: GLTF, textures: Texture[]): MeshLambertMaterial[] {
     const materials: MeshLambertMaterial[] = []
     if (gltf.materials) {
       for (const mat of gltf.materials) {
         let color
-        if (mat.pbrMetallicRoughness?.baseColorFactor) {
-          const [r, g, b] = mat.pbrMetallicRoughness.baseColorFactor
-          color = new Color(r, g, b)
+        let map
+        if (mat.pbrMetallicRoughness) {
+          if (mat.pbrMetallicRoughness.baseColorFactor) {
+             const [r, g, b] = mat.pbrMetallicRoughness.baseColorFactor
+             color = new Color(r, g, b)
+          }
+          if (mat.pbrMetallicRoughness.baseColorTexture !== undefined) {
+             map = textures[mat.pbrMetallicRoughness.baseColorTexture.index]
+          }
         }
-        materials.push(new MeshLambertMaterial({ color }))
+        materials.push(new MeshLambertMaterial({ color, map }))
       }
     }
     return materials
+  }
+
+  private async parseImages(gltf: GLTF, buffers: ArrayBuffer[], baseUri: string): Promise<(ImageBitmap | undefined)[]> {
+    const images: (ImageBitmap | undefined)[] = []
+    if (gltf.images) {
+      for (const img of gltf.images) {
+        let blob: Blob | undefined
+        if (img.uri) {
+             // Поддержка data: URI
+             if (img.uri.startsWith('data:')) {
+                 const res = await fetch(img.uri)
+                 blob = await res.blob()
+             } else {
+                 const res = await fetch(baseUri + img.uri)
+                 blob = await res.blob()
+             }
+        } else if (img.bufferView !== undefined && img.mimeType) {
+           const bufferView = gltf.bufferViews![img.bufferView]
+           const buffer = buffers[bufferView.buffer]
+           const subset = buffer.slice(bufferView.byteOffset || 0, (bufferView.byteOffset || 0) + bufferView.byteLength)
+           blob = new Blob([subset], { type: img.mimeType })
+        }
+        
+        if (blob) {
+           const bitmap = await createImageBitmap(blob)
+           images.push(bitmap)
+        } else {
+           images.push(undefined)
+        }
+      }
+    }
+    return images
+  }
+
+  private parseTextures(gltf: GLTF, images: (ImageBitmap | undefined)[]): Texture[] {
+    const textures: Texture[] = []
+    if (gltf.textures) {
+       for (const texDef of gltf.textures) {
+         if (texDef.source !== undefined && images[texDef.source]) {
+            textures.push(new Texture(images[texDef.source]!))
+         } else {
+            // Fallback for missing texture source
+            textures.push(new Texture(new ImageBitmap())) 
+         }
+       }
+    }
+    return textures
   }
 
   private async parseNodes(
@@ -420,6 +491,18 @@ export class GLTFLoader {
       switch (attributeName) {
         case 'POSITION': bufferName = 'position'; break;
         case 'NORMAL': bufferName = 'normal'; break;
+        case 'TEXCOORD_0':
+          bufferName = 'uv';
+          if (data instanceof Uint8Array) {
+            finalData = new Float32Array(data.length);
+            const s = 1.0 / 255.0;
+            for (let i = 0; i < data.length; i++) finalData[i] = data[i] * s;
+          } else if (data instanceof Uint16Array) {
+            finalData = new Float32Array(data.length);
+            const s = 1.0 / 65535.0;
+            for (let i = 0; i < data.length; i++) finalData[i] = data[i] * s;
+          }
+          break;
         case 'JOINTS_0': 
           bufferName = 'skinIndex'; 
           if (data instanceof Uint8Array) {
